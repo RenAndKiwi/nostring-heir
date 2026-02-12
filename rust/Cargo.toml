@@ -1,3 +1,0 @@
-[workspace]
-members = ["nostring-heir-ffi"]
-resolver = "2"

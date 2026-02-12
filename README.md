@@ -1,38 +1,25 @@
-# NoString Heir
+# NoString Heir App
 
-> Someone left you Bitcoin. This app helps you claim it.
+Mobile app for heirs to claim inherited Bitcoin from NoString vaults.
 
-PWA for heirs to claim Bitcoin from [NoString](https://github.com/RenAndKiwi/nostring) inheritable vaults. Works on any device with a browser.
-
-## How It Works
-
-1. **Import** your vault backup (QR code or pasted JSON)
-2. **Wait** for the timelock countdown to expire
-3. **Claim** — paste any Bitcoin address, sign, done
-
-The owner set everything up. You just need this app and your signing key.
+**Stack:** Flutter + Rust FFI (via flutter_rust_bridge)
 
 ## Architecture
 
-- **SvelteKit PWA** — works offline, no app store needed
-- **Rust → WASM** — all crypto runs in Rust compiled to WebAssembly
-- **No keys stored** — signing happens externally (hardware wallet or one-time seed derivation)
+The heir app is the mirror image of the owner's desktop app:
+- Owner creates Taproot vault, adds heirs, delivers VaultBackup
+- Heir imports VaultBackup, monitors timelock, builds claim PSBT, signs, broadcasts
 
-## Development
+## Why Flutter + Rust?
 
-```bash
-# Build WASM bindings
-cd rust && wasm-pack build --target web nostring-heir-ffi
+- `bitcoin` crate (secp256k1) doesn't compile to WASM — C FFI fails
+- Flutter + flutter_rust_bridge compiles Rust natively (ARM/x86) — no limitations
+- Reuses existing tested Rust code (280+ tests in nostring workspace)
+- Native iOS + Android from one codebase
 
-# Install JS dependencies
-npm install
+## Status
 
-# Dev server
-npm run dev
-
-# Production build
-npm run build
-```
+Starting fresh. Previous SvelteKit PWA approach scrapped (WASM limitations).
 
 ## License
 
