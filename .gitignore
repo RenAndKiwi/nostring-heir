@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.expo/
+
+# Build
+target/
+dist/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Expo
+.expo-shared/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+rust/target/
+**/*.rs.bk
