@@ -1,20 +1,18 @@
 //! WASM bindings for NoString heir claim functionality.
 //!
-//! This crate exposes a minimal API for heirs to:
+//! This crate exposes a minimal API for heirs:
 //! 1. Import and validate a vault backup
 //! 2. Check claim eligibility (timelock expiry)
-//! 3. Build an unsigned claim PSBT
-//! 4. Finalize and broadcast the signed transaction
+//! 3. Validate Bitcoin addresses
 //!
-//! All crypto runs in Rust. The SvelteKit PWA calls these
-//! functions through wasm-bindgen generated TypeScript bindings.
+//! All crypto runs in Rust. Network I/O (block height, UTXOs, broadcast)
+//! is handled by the JavaScript layer via Esplora REST API.
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-// ─── Types (serialized as JSON across WASM boundary) ────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-/// Parsed and validated vault backup.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultInfo {
     pub network: String,
@@ -26,7 +24,6 @@ pub struct VaultInfo {
     pub raw_json: String,
 }
 
-/// Claim eligibility status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimEligibility {
     pub eligible: bool,
@@ -35,78 +32,51 @@ pub struct ClaimEligibility {
     pub current_height: u32,
 }
 
-/// An unspent transaction output at the vault address.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UtxoInfo {
-    pub txid: String,
-    pub vout: u32,
-    pub value: u64,
-    pub confirmations: u32,
-}
+// ─── Core Logic (testable without WASM) ─────────────────────────────────────
 
-/// An unsigned claim transaction ready for signing.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnsignedClaim {
-    pub psbt_base64: String,
-    pub total_sats: u64,
-    pub fee_sats: u64,
-    pub destination: String,
-}
-
-// ─── WASM-exported Functions ────────────────────────────────────────────────
-
-/// Import and validate a vault backup JSON string.
-/// Returns VaultInfo as JSON string, or throws on error.
-#[wasm_bindgen]
-pub fn import_vault_backup(json: &str) -> Result<String, JsError> {
+pub fn do_import_vault_backup(json: &str) -> Result<VaultInfo, String> {
     let backup: serde_json::Value =
-        serde_json::from_str(json).map_err(|e| JsError::new(&format!("Invalid JSON: {}", e)))?;
+        serde_json::from_str(json).map_err(|e| format!("Invalid JSON: {}", e))?;
 
     let version = backup
         .get("version")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| JsError::new("Missing or invalid 'version' field"))?;
+        .ok_or("Missing or invalid 'version' field")?;
 
     if version != 1 {
-        return Err(JsError::new(&format!(
-            "Unsupported backup version: {}",
-            version
-        )));
+        return Err(format!("Unsupported backup version: {}", version));
     }
 
     let network = backup
         .get("network")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| JsError::new("Missing 'network' field"))?
+        .ok_or("Missing 'network' field")?
         .to_string();
 
     let vault_address = backup
         .get("vault_address")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| JsError::new("Missing 'vault_address' field"))?
+        .ok_or("Missing 'vault_address' field")?
         .to_string();
 
     let timelock_blocks = backup
         .get("timelock_blocks")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| JsError::new("Missing 'timelock_blocks' field"))? as u16;
+        .ok_or("Missing 'timelock_blocks' field")? as u16;
 
     let heirs = backup
         .get("heirs")
         .and_then(|v| v.as_array())
-        .ok_or_else(|| JsError::new("Missing 'heirs' array"))?;
+        .ok_or("Missing 'heirs' array")?;
 
     let threshold = backup
         .get("threshold")
         .and_then(|v| v.as_u64())
         .unwrap_or(heirs.len() as u64) as u32;
 
-    // Validate address parses
-    let _addr: bitcoin::Address<bitcoin::address::NetworkUnchecked> = vault_address
-        .parse()
-        .map_err(|e| JsError::new(&format!("Invalid vault address: {}", e)))?;
+    validate_bitcoin_address(&vault_address)?;
 
-    let info = VaultInfo {
+    Ok(VaultInfo {
         network,
         vault_address,
         timelock_blocks,
@@ -114,26 +84,18 @@ pub fn import_vault_backup(json: &str) -> Result<String, JsError> {
         threshold,
         heir_label: None,
         raw_json: json.to_string(),
-    };
-
-    serde_json::to_string(&info).map_err(|e| JsError::new(&format!("Serialization error: {}", e)))
+    })
 }
 
-/// Check if the heir is eligible to claim (timelock expired).
-/// Returns ClaimEligibility as JSON string.
-#[wasm_bindgen]
-pub fn check_eligibility(
-    vault_json: &str,
+pub fn do_check_eligibility(
+    vault: &VaultInfo,
     current_block_height: u32,
     vault_confirmed_height: u32,
-) -> Result<String, JsError> {
-    let vault: VaultInfo = serde_json::from_str(vault_json)
-        .map_err(|e| JsError::new(&format!("Invalid vault info: {}", e)))?;
-
+) -> ClaimEligibility {
     let blocks_needed = vault.timelock_blocks as u32;
     let blocks_since_confirm = current_block_height.saturating_sub(vault_confirmed_height);
 
-    let result = if blocks_since_confirm >= blocks_needed {
+    if blocks_since_confirm >= blocks_needed {
         ClaimEligibility {
             eligible: true,
             blocks_remaining: 0,
@@ -157,26 +119,76 @@ pub fn check_eligibility(
             time_remaining: time_str,
             current_height: current_block_height,
         }
-    };
-
-    serde_json::to_string(&result)
-        .map_err(|e| JsError::new(&format!("Serialization error: {}", e)))
-}
-
-// ─── Non-WASM functions (for native tests) ──────────────────────────────────
-
-/// Parse network string to bitcoin::Network.
-fn parse_network(network: &str) -> Result<bitcoin::Network, String> {
-    match network {
-        "mainnet" | "bitcoin" => Ok(bitcoin::Network::Bitcoin),
-        "testnet" => Ok(bitcoin::Network::Testnet),
-        "signet" => Ok(bitcoin::Network::Signet),
-        "regtest" => Ok(bitcoin::Network::Regtest),
-        other => Err(format!("Unknown network: {}", other)),
     }
 }
 
-// ─── Tests ──────────────────────────────────────────────────────────────────
+/// Validate that a string is a plausible Bitcoin address.
+/// Uses bech32 decoding for segwit addresses, basic checks for legacy.
+fn validate_bitcoin_address(address: &str) -> Result<(), String> {
+    if address.starts_with("bc1") || address.starts_with("tb1") || address.starts_with("bcrt1") {
+        // Bech32/bech32m segwit address
+        let (_hrp, _data) = bech32::decode(address)
+            .map_err(|e| format!("Invalid bech32 address: {}", e))?;
+        Ok(())
+    } else if address.len() >= 25 && address.len() <= 35 {
+        // Legacy base58check — basic length check (full validation would need base58)
+        Ok(())
+    } else {
+        Err(format!("Invalid address format: {}", address))
+    }
+}
+
+pub fn do_validate_address(address: &str, network: &str) -> Result<bool, String> {
+    validate_bitcoin_address(address)?;
+
+    let valid = match network {
+        "mainnet" | "bitcoin" => {
+            address.starts_with("bc1") || address.starts_with('1') || address.starts_with('3')
+        }
+        "testnet" => {
+            address.starts_with("tb1")
+                || address.starts_with('m')
+                || address.starts_with('n')
+                || address.starts_with('2')
+        }
+        "signet" => address.starts_with("tb1") || address.starts_with("sb1"),
+        "regtest" => address.starts_with("bcrt1"),
+        _ => return Err(format!("Unknown network: {}", network)),
+    };
+
+    if !valid {
+        return Err(format!("Address doesn't match network '{}'", network));
+    }
+
+    Ok(true)
+}
+
+// ─── WASM Exports (thin wrappers) ───────────────────────────────────────────
+
+#[wasm_bindgen]
+pub fn import_vault_backup(json: &str) -> Result<String, JsError> {
+    let info = do_import_vault_backup(json).map_err(|e| JsError::new(&e))?;
+    serde_json::to_string(&info).map_err(|e| JsError::new(&format!("Serialization: {}", e)))
+}
+
+#[wasm_bindgen]
+pub fn check_eligibility(
+    vault_json: &str,
+    current_block_height: u32,
+    vault_confirmed_height: u32,
+) -> Result<String, JsError> {
+    let vault: VaultInfo = serde_json::from_str(vault_json)
+        .map_err(|e| JsError::new(&format!("Invalid vault info: {}", e)))?;
+    let result = do_check_eligibility(&vault, current_block_height, vault_confirmed_height);
+    serde_json::to_string(&result).map_err(|e| JsError::new(&format!("Serialization: {}", e)))
+}
+
+#[wasm_bindgen]
+pub fn validate_address(address: &str, network: &str) -> Result<bool, JsError> {
+    do_validate_address(address, network).map_err(|e| JsError::new(&e))
+}
+
+// ─── Tests (use do_* functions directly) ────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -200,16 +212,14 @@ mod tests {
                 "recovery_index": 0,
                 "npub": "npub1abc"
             }],
-            "vault_address": "tb1pexample"
+            "vault_address": "tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c"
         })
         .to_string()
     }
 
     #[test]
     fn test_import_valid_backup() {
-        let result = import_vault_backup(&sample_backup_json());
-        assert!(result.is_ok());
-        let info: VaultInfo = serde_json::from_str(&result.unwrap()).unwrap();
+        let info = do_import_vault_backup(&sample_backup_json()).unwrap();
         assert_eq!(info.network, "testnet");
         assert_eq!(info.timelock_blocks, 26280);
         assert_eq!(info.num_heirs, 1);
@@ -218,22 +228,19 @@ mod tests {
 
     #[test]
     fn test_import_invalid_json() {
-        let result = import_vault_backup("not json");
-        assert!(result.is_err());
+        assert!(do_import_vault_backup("not json").is_err());
     }
 
     #[test]
     fn test_import_wrong_version() {
         let json = serde_json::json!({"version": 99}).to_string();
-        let result = import_vault_backup(&json);
-        assert!(result.is_err());
+        assert!(do_import_vault_backup(&json).is_err());
     }
 
     #[test]
     fn test_import_missing_fields() {
         let json = serde_json::json!({"version": 1}).to_string();
-        let result = import_vault_backup(&json);
-        assert!(result.is_err());
+        assert!(do_import_vault_backup(&json).is_err());
     }
 
     #[test]
@@ -247,10 +254,7 @@ mod tests {
             heir_label: None,
             raw_json: "{}".into(),
         };
-        let vault_json = serde_json::to_string(&vault).unwrap();
-
-        let result_json = check_eligibility(&vault_json, 100_000, 90_000).unwrap();
-        let result: ClaimEligibility = serde_json::from_str(&result_json).unwrap();
+        let result = do_check_eligibility(&vault, 100_000, 90_000);
         assert!(!result.eligible);
         assert_eq!(result.blocks_remaining, 16280);
         assert!(result.time_remaining.contains("days"));
@@ -267,10 +271,7 @@ mod tests {
             heir_label: None,
             raw_json: "{}".into(),
         };
-        let vault_json = serde_json::to_string(&vault).unwrap();
-
-        let result_json = check_eligibility(&vault_json, 130_000, 100_000).unwrap();
-        let result: ClaimEligibility = serde_json::from_str(&result_json).unwrap();
+        let result = do_check_eligibility(&vault, 130_000, 100_000);
         assert!(result.eligible);
         assert_eq!(result.blocks_remaining, 0);
     }
@@ -286,27 +287,35 @@ mod tests {
             heir_label: None,
             raw_json: "{}".into(),
         };
-        let vault_json = serde_json::to_string(&vault).unwrap();
 
-        // Exactly at boundary = eligible
-        let r = check_eligibility(&vault_json, 200, 100).unwrap();
-        let e: ClaimEligibility = serde_json::from_str(&r).unwrap();
-        assert!(e.eligible);
+        let result = do_check_eligibility(&vault, 200, 100);
+        assert!(result.eligible);
 
-        // One block short = not eligible
-        let r = check_eligibility(&vault_json, 199, 100).unwrap();
-        let e: ClaimEligibility = serde_json::from_str(&r).unwrap();
-        assert!(!e.eligible);
-        assert_eq!(e.blocks_remaining, 1);
+        let result = do_check_eligibility(&vault, 199, 100);
+        assert!(!result.eligible);
+        assert_eq!(result.blocks_remaining, 1);
     }
 
     #[test]
-    fn test_parse_network() {
-        assert!(parse_network("mainnet").is_ok());
-        assert!(parse_network("testnet").is_ok());
-        assert!(parse_network("signet").is_ok());
-        assert!(parse_network("regtest").is_ok());
-        assert!(parse_network("bitcoin").is_ok());
-        assert!(parse_network("invalid").is_err());
+    fn test_validate_address_testnet() {
+        assert!(
+            do_validate_address("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx", "testnet").is_ok()
+        );
+        assert!(
+            do_validate_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "testnet").is_err()
+        );
+    }
+
+    #[test]
+    fn test_validate_address_mainnet() {
+        assert!(
+            do_validate_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "mainnet").is_ok()
+        );
+        assert!(do_validate_address("tb1qtest", "mainnet").is_err());
+    }
+
+    #[test]
+    fn test_validate_address_invalid() {
+        assert!(do_validate_address("not_an_address", "mainnet").is_err());
     }
 }
