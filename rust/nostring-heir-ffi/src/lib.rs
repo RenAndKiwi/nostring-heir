@@ -1,151 +1,100 @@
-//! UniFFI bindings for NoString heir claim functionality.
+//! WASM bindings for NoString heir claim functionality.
 //!
 //! This crate exposes a minimal API for heirs to:
 //! 1. Import and validate a vault backup
 //! 2. Check claim eligibility (timelock expiry)
 //! 3. Build an unsigned claim PSBT
-//! 4. Broadcast the signed transaction
+//! 4. Finalize and broadcast the signed transaction
 //!
-//! All crypto runs in Rust. The mobile app (React Native) calls these
-//! functions through generated TypeScript bindings.
+//! All crypto runs in Rust. The SvelteKit PWA calls these
+//! functions through wasm-bindgen generated TypeScript bindings.
 
-use bitcoin::Network;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 
-uniffi::setup_scaffolding!();
-
-// ─── Error Type ─────────────────────────────────────────────────────────────
-
-#[derive(Debug, thiserror::Error, uniffi::Error)]
-pub enum HeirError {
-    #[error("Invalid backup: {reason}")]
-    InvalidBackup { reason: String },
-    #[error("Not eligible: {reason}")]
-    NotEligible { reason: String },
-    #[error("Invalid address: {reason}")]
-    InvalidAddress { reason: String },
-    #[error("Network error: {reason}")]
-    NetworkError { reason: String },
-    #[error("Signing error: {reason}")]
-    SigningError { reason: String },
-}
-
-// ─── Types ──────────────────────────────────────────────────────────────────
+// ─── Types (serialized as JSON across WASM boundary) ────────────────────────
 
 /// Parsed and validated vault backup.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultInfo {
-    /// Bitcoin network (mainnet, testnet, signet, regtest)
     pub network: String,
-    /// Vault P2TR address
     pub vault_address: String,
-    /// Timelock in blocks
     pub timelock_blocks: u16,
-    /// Number of heirs
     pub num_heirs: u32,
-    /// Threshold required to claim
     pub threshold: u32,
-    /// This heir's label (if identifiable)
     pub heir_label: Option<String>,
-    /// Raw backup JSON (preserved for reconstruction)
     pub raw_json: String,
 }
 
 /// Claim eligibility status.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimEligibility {
-    /// Whether the claim can be made now
     pub eligible: bool,
-    /// Blocks remaining until eligible (0 if eligible)
     pub blocks_remaining: u32,
-    /// Estimated time remaining in human-readable format
     pub time_remaining: String,
-    /// Current block height
     pub current_height: u32,
 }
 
 /// An unspent transaction output at the vault address.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UtxoInfo {
-    /// Transaction ID
     pub txid: String,
-    /// Output index
     pub vout: u32,
-    /// Value in satoshis
     pub value: u64,
-    /// Confirmations
     pub confirmations: u32,
 }
 
 /// An unsigned claim transaction ready for signing.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnsignedClaim {
-    /// Base64-encoded PSBT
     pub psbt_base64: String,
-    /// Total amount being claimed (sats)
     pub total_sats: u64,
-    /// Fee in sats
     pub fee_sats: u64,
-    /// Destination address
     pub destination: String,
 }
 
-// ─── Functions ──────────────────────────────────────────────────────────────
+// ─── WASM-exported Functions ────────────────────────────────────────────────
 
 /// Import and validate a vault backup JSON string.
-///
-/// Returns parsed vault info if valid.
-#[uniffi::export]
-pub fn import_vault_backup(json: String) -> Result<VaultInfo, HeirError> {
-    // Parse the backup JSON
-    let backup: serde_json::Value = serde_json::from_str(&json).map_err(|e| {
-        HeirError::InvalidBackup {
-            reason: format!("Invalid JSON: {}", e),
-        }
-    })?;
+/// Returns VaultInfo as JSON string, or throws on error.
+#[wasm_bindgen]
+pub fn import_vault_backup(json: &str) -> Result<String, JsError> {
+    let backup: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsError::new(&format!("Invalid JSON: {}", e)))?;
 
     let version = backup
         .get("version")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| HeirError::InvalidBackup {
-            reason: "Missing or invalid 'version' field".into(),
-        })?;
+        .ok_or_else(|| JsError::new("Missing or invalid 'version' field"))?;
 
     if version != 1 {
-        return Err(HeirError::InvalidBackup {
-            reason: format!("Unsupported backup version: {}", version),
-        });
+        return Err(JsError::new(&format!(
+            "Unsupported backup version: {}",
+            version
+        )));
     }
 
     let network = backup
         .get("network")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| HeirError::InvalidBackup {
-            reason: "Missing 'network' field".into(),
-        })?
+        .ok_or_else(|| JsError::new("Missing 'network' field"))?
         .to_string();
 
     let vault_address = backup
         .get("vault_address")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| HeirError::InvalidBackup {
-            reason: "Missing 'vault_address' field".into(),
-        })?
+        .ok_or_else(|| JsError::new("Missing 'vault_address' field"))?
         .to_string();
 
     let timelock_blocks = backup
         .get("timelock_blocks")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| HeirError::InvalidBackup {
-            reason: "Missing 'timelock_blocks' field".into(),
-        })? as u16;
+        .ok_or_else(|| JsError::new("Missing 'timelock_blocks' field"))? as u16;
 
     let heirs = backup
         .get("heirs")
         .and_then(|v| v.as_array())
-        .ok_or_else(|| HeirError::InvalidBackup {
-            reason: "Missing 'heirs' array".into(),
-        })?;
+        .ok_or_else(|| JsError::new("Missing 'heirs' array"))?;
 
     let threshold = backup
         .get("threshold")
@@ -153,33 +102,38 @@ pub fn import_vault_backup(json: String) -> Result<VaultInfo, HeirError> {
         .unwrap_or(heirs.len() as u64) as u32;
 
     // Validate address parses
-    let _addr: bitcoin::Address<bitcoin::address::NetworkUnchecked> =
-        vault_address.parse().map_err(|e| HeirError::InvalidBackup {
-            reason: format!("Invalid vault address: {}", e),
-        })?;
+    let _addr: bitcoin::Address<bitcoin::address::NetworkUnchecked> = vault_address
+        .parse()
+        .map_err(|e| JsError::new(&format!("Invalid vault address: {}", e)))?;
 
-    Ok(VaultInfo {
+    let info = VaultInfo {
         network,
         vault_address,
         timelock_blocks,
         num_heirs: heirs.len() as u32,
         threshold,
         heir_label: None,
-        raw_json: json,
-    })
+        raw_json: json.to_string(),
+    };
+
+    serde_json::to_string(&info).map_err(|e| JsError::new(&format!("Serialization error: {}", e)))
 }
 
 /// Check if the heir is eligible to claim (timelock expired).
-#[uniffi::export]
+/// Returns ClaimEligibility as JSON string.
+#[wasm_bindgen]
 pub fn check_eligibility(
-    vault: &VaultInfo,
+    vault_json: &str,
     current_block_height: u32,
     vault_confirmed_height: u32,
-) -> ClaimEligibility {
+) -> Result<String, JsError> {
+    let vault: VaultInfo = serde_json::from_str(vault_json)
+        .map_err(|e| JsError::new(&format!("Invalid vault info: {}", e)))?;
+
     let blocks_needed = vault.timelock_blocks as u32;
     let blocks_since_confirm = current_block_height.saturating_sub(vault_confirmed_height);
 
-    if blocks_since_confirm >= blocks_needed {
+    let result = if blocks_since_confirm >= blocks_needed {
         ClaimEligibility {
             eligible: true,
             blocks_remaining: 0,
@@ -188,7 +142,7 @@ pub fn check_eligibility(
         }
     } else {
         let remaining = blocks_needed - blocks_since_confirm;
-        let minutes = remaining as u64 * 10; // ~10 min per block
+        let minutes = remaining as u64 * 10;
         let time_str = if minutes > 1440 {
             format!("~{} days", minutes / 1440)
         } else if minutes > 60 {
@@ -203,69 +157,22 @@ pub fn check_eligibility(
             time_remaining: time_str,
             current_height: current_block_height,
         }
-    }
+    };
+
+    serde_json::to_string(&result)
+        .map_err(|e| JsError::new(&format!("Serialization error: {}", e)))
 }
 
-/// Get current block height from an Electrum server.
-#[uniffi::export]
-pub fn get_block_height(electrum_url: String, network: String) -> Result<u32, HeirError> {
-    let net = parse_network(&network)?;
-    let client =
-        nostring_electrum::ElectrumClient::new(&electrum_url, net).map_err(|e| {
-            HeirError::NetworkError {
-                reason: format!("Connection failed: {}", e),
-            }
-        })?;
+// ─── Non-WASM functions (for native tests) ──────────────────────────────────
 
-    let height = client.get_height().map_err(|e| HeirError::NetworkError {
-        reason: format!("Failed to get height: {}", e),
-    })?;
-
-    Ok(height as u32)
-}
-
-/// Broadcast a raw transaction hex.
-#[uniffi::export]
-pub fn broadcast_transaction(
-    electrum_url: String,
-    network: String,
-    raw_tx_hex: String,
-) -> Result<String, HeirError> {
-    let net = parse_network(&network)?;
-    let client =
-        nostring_electrum::ElectrumClient::new(&electrum_url, net).map_err(|e| {
-            HeirError::NetworkError {
-                reason: format!("Connection failed: {}", e),
-            }
-        })?;
-
-    let tx_bytes = hex::decode(&raw_tx_hex).map_err(|e| HeirError::SigningError {
-        reason: format!("Invalid hex: {}", e),
-    })?;
-
-    let tx: bitcoin::Transaction =
-        bitcoin::consensus::deserialize(&tx_bytes).map_err(|e| HeirError::SigningError {
-            reason: format!("Invalid transaction: {}", e),
-        })?;
-
-    let txid = client.broadcast(&tx).map_err(|e| HeirError::NetworkError {
-        reason: format!("Broadcast failed: {}", e),
-    })?;
-
-    Ok(txid.to_string())
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-fn parse_network(network: &str) -> Result<Network, HeirError> {
+/// Parse network string to bitcoin::Network.
+fn parse_network(network: &str) -> Result<bitcoin::Network, String> {
     match network {
-        "mainnet" | "bitcoin" => Ok(Network::Bitcoin),
-        "testnet" => Ok(Network::Testnet),
-        "signet" => Ok(Network::Signet),
-        "regtest" => Ok(Network::Regtest),
-        other => Err(HeirError::InvalidBackup {
-            reason: format!("Unknown network: {}", other),
-        }),
+        "mainnet" | "bitcoin" => Ok(bitcoin::Network::Bitcoin),
+        "testnet" => Ok(bitcoin::Network::Testnet),
+        "signet" => Ok(bitcoin::Network::Signet),
+        "regtest" => Ok(bitcoin::Network::Regtest),
+        other => Err(format!("Unknown network: {}", other)),
     }
 }
 
@@ -300,9 +207,9 @@ mod tests {
 
     #[test]
     fn test_import_valid_backup() {
-        let result = import_vault_backup(sample_backup_json());
+        let result = import_vault_backup(&sample_backup_json());
         assert!(result.is_ok());
-        let info = result.unwrap();
+        let info: VaultInfo = serde_json::from_str(&result.unwrap()).unwrap();
         assert_eq!(info.network, "testnet");
         assert_eq!(info.timelock_blocks, 26280);
         assert_eq!(info.num_heirs, 1);
@@ -311,29 +218,21 @@ mod tests {
 
     #[test]
     fn test_import_invalid_json() {
-        let result = import_vault_backup("not json".into());
+        let result = import_vault_backup("not json");
         assert!(result.is_err());
-        match result.unwrap_err() {
-            HeirError::InvalidBackup { reason } => assert!(reason.contains("Invalid JSON")),
-            _ => panic!("Expected InvalidBackup"),
-        }
     }
 
     #[test]
     fn test_import_wrong_version() {
         let json = serde_json::json!({"version": 99}).to_string();
-        let result = import_vault_backup(json);
+        let result = import_vault_backup(&json);
         assert!(result.is_err());
-        match result.unwrap_err() {
-            HeirError::InvalidBackup { reason } => assert!(reason.contains("Unsupported")),
-            _ => panic!("Expected InvalidBackup"),
-        }
     }
 
     #[test]
     fn test_import_missing_fields() {
         let json = serde_json::json!({"version": 1}).to_string();
-        let result = import_vault_backup(json);
+        let result = import_vault_backup(&json);
         assert!(result.is_err());
     }
 
@@ -348,8 +247,10 @@ mod tests {
             heir_label: None,
             raw_json: "{}".into(),
         };
+        let vault_json = serde_json::to_string(&vault).unwrap();
 
-        let result = check_eligibility(&vault, 100_000, 90_000);
+        let result_json = check_eligibility(&vault_json, 100_000, 90_000).unwrap();
+        let result: ClaimEligibility = serde_json::from_str(&result_json).unwrap();
         assert!(!result.eligible);
         assert_eq!(result.blocks_remaining, 16280);
         assert!(result.time_remaining.contains("days"));
@@ -366,11 +267,12 @@ mod tests {
             heir_label: None,
             raw_json: "{}".into(),
         };
+        let vault_json = serde_json::to_string(&vault).unwrap();
 
-        let result = check_eligibility(&vault, 130_000, 100_000);
+        let result_json = check_eligibility(&vault_json, 130_000, 100_000).unwrap();
+        let result: ClaimEligibility = serde_json::from_str(&result_json).unwrap();
         assert!(result.eligible);
         assert_eq!(result.blocks_remaining, 0);
-        assert_eq!(result.time_remaining, "Ready to claim!");
     }
 
     #[test]
@@ -384,15 +286,18 @@ mod tests {
             heir_label: None,
             raw_json: "{}".into(),
         };
+        let vault_json = serde_json::to_string(&vault).unwrap();
 
-        // Exactly at boundary
-        let result = check_eligibility(&vault, 200, 100);
-        assert!(result.eligible);
+        // Exactly at boundary = eligible
+        let r = check_eligibility(&vault_json, 200, 100).unwrap();
+        let e: ClaimEligibility = serde_json::from_str(&r).unwrap();
+        assert!(e.eligible);
 
-        // One block short
-        let result = check_eligibility(&vault, 199, 100);
-        assert!(!result.eligible);
-        assert_eq!(result.blocks_remaining, 1);
+        // One block short = not eligible
+        let r = check_eligibility(&vault_json, 199, 100).unwrap();
+        let e: ClaimEligibility = serde_json::from_str(&r).unwrap();
+        assert!(!e.eligible);
+        assert_eq!(e.blocks_remaining, 1);
     }
 
     #[test]

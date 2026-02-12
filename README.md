@@ -2,7 +2,7 @@
 
 > Someone left you Bitcoin. This app helps you claim it.
 
-Mobile app for heirs to claim Bitcoin from [NoString](https://github.com/RenAndKiwi/nostring) inheritable vaults. Cross-platform (iOS + Android).
+PWA for heirs to claim Bitcoin from [NoString](https://github.com/RenAndKiwi/nostring) inheritable vaults. Works on any device with a browser.
 
 ## How It Works
 
@@ -14,24 +14,24 @@ The owner set everything up. You just need this app and your signing key.
 
 ## Architecture
 
-- **React Native + Expo** — cross-platform mobile
-- **Rust core via UniFFI** — all crypto runs in Rust (nostring-ccd, nostring-inherit)
-- **No keys stored** — signing happens on your hardware wallet or is derived once from seed
+- **SvelteKit PWA** — works offline, no app store needed
+- **Rust → WASM** — all crypto runs in Rust compiled to WebAssembly
+- **No keys stored** — signing happens externally (hardware wallet or one-time seed derivation)
 
 ## Development
 
 ```bash
-# Install dependencies
+# Build WASM bindings
+cd rust && wasm-pack build --target web nostring-heir-ffi
+
+# Install JS dependencies
 npm install
 
-# iOS
-npx expo run:ios
+# Dev server
+npm run dev
 
-# Android
-npx expo run:android
-
-# Build Rust FFI
-cd rust && cargo build --release
+# Production build
+npm run build
 ```
 
 ## License
