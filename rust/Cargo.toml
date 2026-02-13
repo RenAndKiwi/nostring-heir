@@ -1,0 +1,19 @@
+[package]
+name = "nostring-heir-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.11.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# NoString workspace crates (path deps for local dev)
+nostring-inherit = { path = "../../nostring/crates/nostring-inherit" }
+nostring-ccd = { path = "../../nostring/crates/nostring-ccd" }
+bitcoin = { version = "0.32", features = ["serde"] }
+hex = "0.4"
+miniscript = { version = "12", features = ["serde"] }

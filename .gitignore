@@ -5,10 +5,12 @@ build/
 .flutter-plugins-dependencies
 .packages
 *.iml
+.fvm/
+.fvmrc
 
 # Rust
-target/
-*.lock
+rust/target/
+Cargo.lock
 
 # IDE
 .idea/
@@ -18,3 +20,14 @@ target/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated (can be regenerated with flutter_rust_bridge_codegen)
+# Keep these tracked so CI doesn't need codegen
+# lib/src/rust/frb_generated*.dart
+# rust/src/frb_generated.rs
+
+# Node
+node_modules/
+
+# Misc
+pubspec.lock
