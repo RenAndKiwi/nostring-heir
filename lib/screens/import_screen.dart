@@ -4,6 +4,7 @@ import '../theme/nostring_theme.dart';
 import '../widgets/gold_gradient_text.dart';
 import '../widgets/info_row.dart';
 import '../widgets/status_badge.dart';
+import 'scan_screen.dart';
 import 'status_screen.dart';
 
 class ImportScreen extends StatefulWidget {
@@ -16,16 +17,12 @@ class ImportScreen extends StatefulWidget {
 class _ImportScreenState extends State<ImportScreen> {
   final _controller = TextEditingController();
   bool _loading = false;
+  bool _showManualEntry = false;
   VaultInfo? _vaultInfo;
   String? _error;
+  String? _resolvedJson;
 
-  Future<void> _handleImport() async {
-    final json = _controller.text.trim();
-    if (json.isEmpty) {
-      setState(() => _error = 'Please paste a VaultBackup JSON');
-      return;
-    }
-
+  Future<void> _handlePayload(String payload) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -33,20 +30,37 @@ class _ImportScreenState extends State<ImportScreen> {
     });
 
     try {
+      // Decompress if nostring: URI, passthrough if raw JSON
+      final json = await decompressVaultBackup(payload: payload);
+      _resolvedJson = json;
+      _controller.text = json;
+
       final info = await importVaultBackup(json: json);
       setState(() {
         _vaultInfo = info;
         _loading = false;
+        _showManualEntry = true; // Show manual view with result
       });
     } catch (e) {
       setState(() {
         _error = e.toString();
         _loading = false;
+        _showManualEntry = true; // Show manual view so user can fix
       });
     }
   }
 
+  Future<void> _handleManualImport() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      setState(() => _error = 'Please paste a VaultBackup JSON or nostring: URI');
+      return;
+    }
+    await _handlePayload(text);
+  }
+
   void _navigateToStatus() {
+    final json = _resolvedJson ?? _controller.text.trim();
     final net = _vaultInfo!.network;
     final defaultElectrum = net == 'testnet'
         ? 'ssl://electrum.blockstream.info:60002'
@@ -57,7 +71,7 @@ class _ImportScreenState extends State<ImportScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => StatusScreen(
-          vaultJson: _controller.text.trim(),
+          vaultJson: json,
           electrumUrl: defaultElectrum,
           network: net,
         ),
@@ -67,8 +81,28 @@ class _ImportScreenState extends State<ImportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Show scanner by default, manual entry on toggle
+    if (!_showManualEntry && _vaultInfo == null) {
+      return ScanScreen(
+        onScanned: _handlePayload,
+        onManualEntry: () => setState(() => _showManualEntry = true),
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('NoString Heir')),
+      appBar: AppBar(
+        title: const Text('NoString Heir'),
+        leading: _vaultInfo == null
+            ? IconButton(
+                icon: const Icon(Icons.qr_code_scanner),
+                onPressed: () => setState(() {
+                  _showManualEntry = false;
+                  _error = null;
+                }),
+                tooltip: 'Scan QR',
+              )
+            : null,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(NoStringSpacing.lg),
         child: Column(
@@ -76,8 +110,8 @@ class _ImportScreenState extends State<ImportScreen> {
           children: [
             const GoldGradientText('Import Vault Backup'),
             const SizedBox(height: NoStringSpacing.sm),
-            const Text(
-              'Paste the VaultBackup JSON from the vault owner.',
+            Text(
+              'Paste VaultBackup JSON or a nostring: URI.',
               style: TextStyle(color: NoStringColors.textMuted),
             ),
             const SizedBox(height: NoStringSpacing.lg),
@@ -93,21 +127,18 @@ class _ImportScreenState extends State<ImportScreen> {
                   color: NoStringColors.textPrimary,
                 ),
                 decoration: const InputDecoration(
-                  hintText: '{"version": 1, "network": "testnet", ...}',
+                  hintText: '{"version": 1, ...} or nostring:v1:...',
                 ),
               ),
             ),
             const SizedBox(height: NoStringSpacing.lg),
             ElevatedButton(
-              onPressed: _loading ? null : _handleImport,
+              onPressed: _loading ? null : _handleManualImport,
               child: _loading
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.black,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                     )
                   : const Text('Verify & Import'),
             ),
@@ -138,10 +169,7 @@ class _ImportScreenState extends State<ImportScreen> {
           const Icon(Icons.error_outline, color: NoStringColors.error, size: 20),
           const SizedBox(width: NoStringSpacing.sm),
           Expanded(
-            child: Text(
-              _error!,
-              style: const TextStyle(color: NoStringColors.error, fontSize: 13),
-            ),
+            child: Text(_error!, style: const TextStyle(color: NoStringColors.error, fontSize: 13)),
           ),
         ],
       ),
@@ -161,18 +189,12 @@ class _ImportScreenState extends State<ImportScreen> {
                 const SizedBox(width: NoStringSpacing.sm),
                 const Text(
                   'Vault Verified',
-                  style: TextStyle(
-                    color: NoStringColors.success,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(color: NoStringColors.success, fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 StatusBadge(
                   label: _vaultInfo!.network.toUpperCase(),
-                  type: _vaultInfo!.network == 'bitcoin'
-                      ? BadgeType.success
-                      : BadgeType.warning,
+                  type: _vaultInfo!.network == 'bitcoin' ? BadgeType.success : BadgeType.warning,
                 ),
               ],
             ),

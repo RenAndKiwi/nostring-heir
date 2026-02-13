@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2105998238;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2145875486;
 
 // Section: executor
 
@@ -160,6 +160,72 @@ fn wire__crate__api__check_eligibility_impl(
                         api_current_height,
                         api_confirmation_height,
                     )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__compress_vault_backup_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "compress_vault_backup",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::compress_vault_backup(api_json)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__decompress_vault_backup_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "decompress_vault_backup",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_payload = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::decompress_vault_backup(api_payload)?;
                     Ok(output_ok)
                 })())
             }
@@ -512,10 +578,12 @@ fn pde_ffi_dispatcher_primary_impl(
         1 => wire__crate__api__broadcast_transaction_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__api__build_claim_psbt_impl(port, ptr, rust_vec_len, data_len),
         3 => wire__crate__api__check_eligibility_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__fetch_vault_status_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__finalize_psbt_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__import_vault_backup_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__validate_address_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__compress_vault_backup_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__decompress_vault_backup_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__fetch_vault_status_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__finalize_psbt_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__import_vault_backup_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__validate_address_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

@@ -379,6 +379,68 @@ pub fn broadcast_transaction(
     })
 }
 
+/// Compress a VaultBackup JSON string into the nostring QR format.
+/// Format: `nostring:v1:<base64(gzip(json))>`
+pub fn compress_vault_backup(json: String) -> Result<String, String> {
+    use base64::Engine;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    // Validate it's real JSON first
+    let _: VaultBackup =
+        serde_json::from_str(&json).map_err(|e| format!("Invalid VaultBackup JSON: {}", e))?;
+
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+    encoder
+        .write_all(json.as_bytes())
+        .map_err(|e| format!("Compression failed: {}", e))?;
+    let compressed = encoder
+        .finish()
+        .map_err(|e| format!("Compression finalize failed: {}", e))?;
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&compressed);
+    Ok(format!("nostring:v1:{}", b64))
+}
+
+/// Decompress a nostring QR payload back into VaultBackup JSON.
+/// Accepts either `nostring:v1:<base64>` format or raw JSON (passthrough).
+pub fn decompress_vault_backup(payload: String) -> Result<String, String> {
+    use base64::Engine;
+    use flate2::read::GzDecoder;
+    use std::io::Read;
+
+    let trimmed = payload.trim();
+
+    // Raw JSON passthrough
+    if trimmed.starts_with('{') {
+        let _: VaultBackup = serde_json::from_str(trimmed)
+            .map_err(|e| format!("Invalid JSON: {}", e))?;
+        return Ok(trimmed.to_string());
+    }
+
+    // Parse nostring URI
+    let data = trimmed
+        .strip_prefix("nostring:v1:")
+        .ok_or("Unrecognized format. Expected 'nostring:v1:...' or raw JSON.")?;
+
+    let compressed = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| format!("Invalid base64: {}", e))?;
+
+    let mut decoder = GzDecoder::new(&compressed[..]);
+    let mut json = String::new();
+    decoder
+        .read_to_string(&mut json)
+        .map_err(|e| format!("Decompression failed: {}", e))?;
+
+    // Validate the result is a VaultBackup
+    let _: VaultBackup =
+        serde_json::from_str(&json).map_err(|e| format!("Decompressed data is not valid VaultBackup: {}", e))?;
+
+    Ok(json)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -674,5 +736,61 @@ mod tests {
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No UTXOs"), "Expected 'No UTXOs' error");
+    }
+
+    #[test]
+    fn test_compress_decompress_roundtrip() {
+        let json = make_test_vault_json();
+        let compressed = compress_vault_backup(json.clone()).unwrap();
+        assert!(compressed.starts_with("nostring:v1:"));
+        assert!(compressed.len() < json.len(), "Compressed should be smaller");
+
+        let decompressed = decompress_vault_backup(compressed).unwrap();
+        let orig: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let round: serde_json::Value = serde_json::from_str(&decompressed).unwrap();
+        assert_eq!(orig, round);
+    }
+
+    #[test]
+    fn test_decompress_raw_json_passthrough() {
+        let json = make_test_vault_json();
+        let result = decompress_vault_backup(json.clone()).unwrap();
+        assert_eq!(result.trim(), json.trim());
+    }
+
+    #[test]
+    fn test_decompress_invalid_prefix() {
+        let result = decompress_vault_backup("nostring:v2:abc".into());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unrecognized format"));
+    }
+
+    #[test]
+    fn test_decompress_invalid_base64() {
+        let result = decompress_vault_backup("nostring:v1:!!!invalid!!!".into());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_compress_invalid_json() {
+        let result = compress_vault_backup("not json".into());
+        assert!(result.is_err());
+    }
+
+    fn make_test_vault_json() -> String {
+        serde_json::json!({
+            "version": 1,
+            "vault_address": "tb1qtest",
+            "network": "testnet",
+            "owner_pubkey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "cosigner_pubkey": "0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "chain_code": "0000000000000000000000000000000000000000000000000000000000000001",
+            "address_index": 0,
+            "heirs": [{"label": "Alice", "xpub": "tpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8", "fingerprint": "aabbccdd", "derivation_path": "m/86'/1'/0'", "recovery_index": 0}],
+            "timelock_blocks": 100,
+            "threshold": 1,
+            "recovery_leaves": [{"leaf_index": 0, "script_hex": "00", "control_block_hex": "00", "timelock_blocks": 100, "leaf_version": 192}],
+            "taproot_internal_key": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        }).to_string()
     }
 }

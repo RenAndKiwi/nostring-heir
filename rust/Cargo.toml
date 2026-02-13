@@ -20,6 +20,7 @@ hex = "0.4"
 base64 = "0.22"
 miniscript = { version = "12", features = ["serde"] }
 rustls = "0.23"
+flate2 = "1"
 
 [dev-dependencies]
 bitcoinconsensus = "0.106"

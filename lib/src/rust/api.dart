@@ -81,6 +81,16 @@ Future<BroadcastResult> broadcastTransaction({
   network: network,
 );
 
+/// Compress a VaultBackup JSON string into the nostring QR format.
+/// Format: `nostring:v1:<base64(gzip(json))>`
+Future<String> compressVaultBackup({required String json}) =>
+    RustLib.instance.api.crateApiCompressVaultBackup(json: json);
+
+/// Decompress a nostring QR payload back into VaultBackup JSON.
+/// Accepts either `nostring:v1:<base64>` format or raw JSON (passthrough).
+Future<String> decompressVaultBackup({required String payload}) =>
+    RustLib.instance.api.crateApiDecompressVaultBackup(payload: payload);
+
 /// Result of broadcasting a transaction.
 class BroadcastResult {
   final String txid;
