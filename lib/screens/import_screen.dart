@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../src/rust/api.dart';
+import 'status_screen.dart';
 
 class ImportScreen extends StatefulWidget {
   const ImportScreen({super.key});
@@ -168,6 +169,37 @@ class _ImportScreenState extends State<ImportScreen> {
                     _infoRow('Recovery Data',
                         _vaultInfo!.hasRecoveryLeaves ? 'Yes' : 'No'),
                   ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  final net = _vaultInfo!.network;
+                  final defaultElectrum = net == 'testnet'
+                      ? 'ssl://electrum.blockstream.info:60002'
+                      : net == 'signet'
+                          ? 'ssl://mempool.space:60602'
+                          : 'ssl://electrum.blockstream.info:50002';
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => StatusScreen(
+                        network: net,
+                        vaultJson: _controller.text.trim(),
+                        electrumUrl: defaultElectrum,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.search),
+                label: const Text('Check Vault Status'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A5C2E),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ],

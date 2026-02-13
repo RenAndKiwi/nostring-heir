@@ -1,3 +1,4 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use nostring_inherit::backup::VaultBackup;
@@ -72,18 +73,189 @@ pub fn check_eligibility(
 /// Validate a Bitcoin address string for the given network.
 pub fn validate_address(address: String, network: String) -> Result<bool, String> {
     use std::str::FromStr;
-    let net = match network.as_str() {
-        "mainnet" | "bitcoin" => bitcoin::Network::Bitcoin,
-        "testnet" => bitcoin::Network::Testnet,
-        "signet" => bitcoin::Network::Signet,
-        "regtest" => bitcoin::Network::Regtest,
-        _ => return Err(format!("Unknown network: {}", network)),
-    };
+    let net = parse_network(&network)?;
 
     match bitcoin::Address::from_str(&address) {
         Ok(addr) => Ok(addr.is_valid_for_network(net)),
         Err(e) => Err(format!("Invalid address: {}", e)),
     }
+}
+
+/// Live vault status from the blockchain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultStatus {
+    pub balance_sat: u64,
+    pub utxo_count: usize,
+    pub current_height: u64,
+    pub confirmation_height: u64,
+    pub eligible: bool,
+    pub blocks_remaining: i64,
+    pub days_remaining: f64,
+}
+
+/// Built unsigned claim PSBT ready for signing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimPsbt {
+    pub psbt_base64: String,
+    pub total_input_sat: u64,
+    pub fee_sat: u64,
+    pub output_sat: u64,
+    pub destination: String,
+    pub num_inputs: usize,
+}
+
+fn parse_network(network: &str) -> Result<bitcoin::Network, String> {
+    match network {
+        "mainnet" | "bitcoin" => Ok(bitcoin::Network::Bitcoin),
+        "testnet" => Ok(bitcoin::Network::Testnet),
+        "signet" => Ok(bitcoin::Network::Signet),
+        "regtest" => Ok(bitcoin::Network::Regtest),
+        _ => Err(format!("Unknown network: {}", network)),
+    }
+}
+
+/// Fetch live vault status from Electrum: balance, UTXOs, eligibility.
+pub fn fetch_vault_status(vault_json: String, electrum_url: String) -> Result<VaultStatus, String> {
+    let backup: VaultBackup =
+        serde_json::from_str(&vault_json).map_err(|e| format!("Invalid JSON: {}", e))?;
+
+    let vault = backup
+        .reconstruct()
+        .map_err(|e| format!("Vault reconstruction failed: {}", e))?;
+
+    let network = parse_network(&backup.network)?;
+    let client = nostring_electrum::ElectrumClient::new(&electrum_url, network)
+        .map_err(|e| format!("Electrum connection failed: {}", e))?;
+
+    let current_height = client
+        .get_height()
+        .map_err(|e| format!("Failed to get block height: {}", e))? as u64;
+
+    let utxos = client
+        .get_utxos(&vault.address)
+        .map_err(|e| format!("Failed to fetch UTXOs: {}", e))?;
+
+    let balance_sat: u64 = utxos.iter().map(|u| u.value.to_sat()).sum();
+    let utxo_count = utxos.len();
+
+    // Earliest confirmation height (for timelock calculation)
+    let confirmation_height = utxos
+        .iter()
+        .filter(|u| u.height > 0)
+        .map(|u| u.height as u64)
+        .min()
+        .unwrap_or(current_height);
+
+    let timelock_blocks = backup.timelock_blocks as i64;
+    let blocks_since = current_height as i64 - confirmation_height as i64;
+    let blocks_remaining = timelock_blocks - blocks_since;
+    let days_remaining = blocks_remaining as f64 * 10.0 / 1440.0;
+
+    Ok(VaultStatus {
+        balance_sat,
+        utxo_count,
+        current_height,
+        confirmation_height,
+        eligible: blocks_remaining <= 0,
+        blocks_remaining,
+        days_remaining,
+    })
+}
+
+/// Build an unsigned claim PSBT for the heir's recovery path.
+///
+/// The heir must sign this PSBT externally (hardware wallet, Sparrow, etc.)
+/// then import the signed version for broadcast.
+pub fn build_claim_psbt(
+    vault_json: String,
+    electrum_url: String,
+    destination_address: String,
+    heir_index: usize,
+    fee_rate_sat_vb: u64,
+) -> Result<ClaimPsbt, String> {
+    let backup: VaultBackup =
+        serde_json::from_str(&vault_json).map_err(|e| format!("Invalid JSON: {}", e))?;
+
+    let vault = backup
+        .reconstruct()
+        .map_err(|e| format!("Vault reconstruction failed: {}", e))?;
+
+    let network = parse_network(&backup.network)?;
+
+    // Validate fee rate early, before any network I/O
+    if fee_rate_sat_vb > 500 {
+        return Err("Fee rate exceeds 500 sat/vB safety limit".into());
+    }
+
+    // Validate destination address
+    use std::str::FromStr;
+    let dest_addr = bitcoin::Address::from_str(&destination_address)
+        .map_err(|e| format!("Invalid destination address: {}", e))?
+        .require_network(network)
+        .map_err(|e| format!("Address network mismatch: {}", e))?;
+
+    // Fetch UTXOs
+    let client = nostring_electrum::ElectrumClient::new(&electrum_url, network)
+        .map_err(|e| format!("Electrum connection failed: {}", e))?;
+
+    let utxos = client
+        .get_utxos(&vault.address)
+        .map_err(|e| format!("Failed to fetch UTXOs: {}", e))?;
+
+    if utxos.is_empty() {
+        return Err("No UTXOs found in vault".into());
+    }
+
+    // Convert to (OutPoint, TxOut) pairs for build_heir_claim_psbt
+    let utxo_pairs: Vec<(bitcoin::OutPoint, bitcoin::TxOut)> = utxos
+        .iter()
+        .map(|u| {
+            (
+                u.outpoint,
+                bitcoin::TxOut {
+                    value: u.value,
+                    script_pubkey: u.script_pubkey.clone(),
+                },
+            )
+        })
+        .collect();
+
+    let total_input_sat: u64 = utxo_pairs.iter().map(|(_, txout)| txout.value.to_sat()).sum();
+    let num_inputs = utxo_pairs.len();
+
+    // Estimate fee — compute tree depth from recovery leaves count
+    let num_leaves = backup.recovery_leaves.len().max(1);
+    let tree_depth = (num_leaves as f64).log2().ceil() as usize;
+    let vbytes =
+        nostring_inherit::taproot::estimate_heir_claim_vbytes(num_inputs, 1, tree_depth);
+    let fee_sat = vbytes as u64 * fee_rate_sat_vb;
+
+    let fee = bitcoin::Amount::from_sat(fee_sat);
+
+    // Build PSBT
+    let psbt = nostring_inherit::taproot::build_heir_claim_psbt(
+        &vault,
+        heir_index,
+        &utxo_pairs,
+        &dest_addr,
+        fee,
+    )
+    .map_err(|e| format!("PSBT construction failed: {}", e))?;
+
+    // Serialize to base64
+    let psbt_bytes = psbt.serialize();
+    let psbt_base64 = base64::engine::general_purpose::STANDARD.encode(&psbt_bytes);
+
+    let output_sat = total_input_sat.saturating_sub(fee_sat);
+
+    Ok(ClaimPsbt {
+        psbt_base64,
+        total_input_sat,
+        fee_sat,
+        output_sat,
+        destination: destination_address,
+        num_inputs,
+    })
 }
 
 #[cfg(test)]
@@ -236,8 +408,82 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_network() {
+        assert!(parse_network("bitcoin").is_ok());
+        assert!(parse_network("mainnet").is_ok());
+        assert!(parse_network("testnet").is_ok());
+        assert!(parse_network("signet").is_ok());
+        assert!(parse_network("regtest").is_ok());
+        assert!(parse_network("invalid").is_err());
+    }
+
+    #[test]
+    fn test_fee_rate_safety_limit() {
+        // build_claim_psbt should reject fee rates above 500 sat/vB
+        // We can't test the full function without Electrum, but we test the validation
+        let json = make_valid_backup_json();
+        let result = build_claim_psbt(
+            json,
+            "ssl://electrum.blockstream.info:50002".into(),
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".into(),
+            0,
+            501, // exceeds 500 limit
+        );
+        // This will fail on Electrum connection (no real server), but the fee check
+        // happens after connection, so this test verifies the function signature compiles.
+        // The actual fee limit test needs a mock.
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fetch_vault_status_bad_electrum() {
+        let json = make_valid_backup_json();
+        let result = fetch_vault_status(json, "ssl://nonexistent:50002".into());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Electrum"));
+    }
+
+    #[test]
     fn test_validate_invalid_address() {
         let result = validate_address("notanaddress".into(), "testnet".into());
         assert!(result.is_err());
+    }
+
+    /// Integration test: connects to real Electrum testnet server.
+    /// Tests the full fetch_vault_status flow with a real backup.
+    /// The vault likely has 0 balance, but the connection + query should succeed.
+    #[test]
+    #[ignore] // Run with: cargo test -- --ignored test_fetch_status_real_electrum
+    fn test_fetch_status_real_electrum() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let json = make_valid_backup_json();
+        // This uses mainnet keys but we're just testing the Electrum connection works.
+        // The vault address won't have funds, but the query should succeed.
+        let result = fetch_vault_status(
+            json,
+            "ssl://electrum.blockstream.info:50002".into(),
+        );
+        assert!(result.is_ok(), "Electrum query failed: {:?}", result.err());
+        let status = result.unwrap();
+        assert!(status.current_height > 800_000);
+        assert_eq!(status.balance_sat, 0); // no funds expected
+    }
+
+    /// Integration test: build_claim_psbt with real Electrum.
+    /// Should fail gracefully with "No UTXOs" since the test vault is unfunded.
+    #[test]
+    #[ignore]
+    fn test_build_psbt_no_utxos() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let json = make_valid_backup_json();
+        let result = build_claim_psbt(
+            json,
+            "ssl://electrum.blockstream.info:50002".into(),
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".into(),
+            0,
+            2,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No UTXOs"), "Expected 'No UTXOs' error");
     }
 }

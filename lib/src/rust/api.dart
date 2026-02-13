@@ -6,7 +6,8 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `parse_network`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Parse, validate, and VERIFY a VaultBackup JSON string.
 ///
@@ -35,6 +36,33 @@ Future<bool> validateAddress({
   network: network,
 );
 
+/// Fetch live vault status from Electrum: balance, UTXOs, eligibility.
+Future<VaultStatus> fetchVaultStatus({
+  required String vaultJson,
+  required String electrumUrl,
+}) => RustLib.instance.api.crateApiFetchVaultStatus(
+  vaultJson: vaultJson,
+  electrumUrl: electrumUrl,
+);
+
+/// Build an unsigned claim PSBT for the heir's recovery path.
+///
+/// The heir must sign this PSBT externally (hardware wallet, Sparrow, etc.)
+/// then import the signed version for broadcast.
+Future<ClaimPsbt> buildClaimPsbt({
+  required String vaultJson,
+  required String electrumUrl,
+  required String destinationAddress,
+  required BigInt heirIndex,
+  required BigInt feeRateSatVb,
+}) => RustLib.instance.api.crateApiBuildClaimPsbt(
+  vaultJson: vaultJson,
+  electrumUrl: electrumUrl,
+  destinationAddress: destinationAddress,
+  heirIndex: heirIndex,
+  feeRateSatVb: feeRateSatVb,
+);
+
 /// Claim eligibility status.
 class ClaimEligibility {
   final bool eligible;
@@ -59,6 +87,46 @@ class ClaimEligibility {
           eligible == other.eligible &&
           blocksRemaining == other.blocksRemaining &&
           daysRemaining == other.daysRemaining;
+}
+
+/// Built unsigned claim PSBT ready for signing.
+class ClaimPsbt {
+  final String psbtBase64;
+  final BigInt totalInputSat;
+  final BigInt feeSat;
+  final BigInt outputSat;
+  final String destination;
+  final BigInt numInputs;
+
+  const ClaimPsbt({
+    required this.psbtBase64,
+    required this.totalInputSat,
+    required this.feeSat,
+    required this.outputSat,
+    required this.destination,
+    required this.numInputs,
+  });
+
+  @override
+  int get hashCode =>
+      psbtBase64.hashCode ^
+      totalInputSat.hashCode ^
+      feeSat.hashCode ^
+      outputSat.hashCode ^
+      destination.hashCode ^
+      numInputs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ClaimPsbt &&
+          runtimeType == other.runtimeType &&
+          psbtBase64 == other.psbtBase64 &&
+          totalInputSat == other.totalInputSat &&
+          feeSat == other.feeSat &&
+          outputSat == other.outputSat &&
+          destination == other.destination &&
+          numInputs == other.numInputs;
 }
 
 /// Vault summary returned after parsing and verifying a VaultBackup JSON.
@@ -103,4 +171,48 @@ class VaultInfo {
           heirLabels == other.heirLabels &&
           hasRecoveryLeaves == other.hasRecoveryLeaves &&
           addressVerified == other.addressVerified;
+}
+
+/// Live vault status from the blockchain.
+class VaultStatus {
+  final BigInt balanceSat;
+  final BigInt utxoCount;
+  final BigInt currentHeight;
+  final BigInt confirmationHeight;
+  final bool eligible;
+  final PlatformInt64 blocksRemaining;
+  final double daysRemaining;
+
+  const VaultStatus({
+    required this.balanceSat,
+    required this.utxoCount,
+    required this.currentHeight,
+    required this.confirmationHeight,
+    required this.eligible,
+    required this.blocksRemaining,
+    required this.daysRemaining,
+  });
+
+  @override
+  int get hashCode =>
+      balanceSat.hashCode ^
+      utxoCount.hashCode ^
+      currentHeight.hashCode ^
+      confirmationHeight.hashCode ^
+      eligible.hashCode ^
+      blocksRemaining.hashCode ^
+      daysRemaining.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VaultStatus &&
+          runtimeType == other.runtimeType &&
+          balanceSat == other.balanceSat &&
+          utxoCount == other.utxoCount &&
+          currentHeight == other.currentHeight &&
+          confirmationHeight == other.confirmationHeight &&
+          eligible == other.eligible &&
+          blocksRemaining == other.blocksRemaining &&
+          daysRemaining == other.daysRemaining;
 }

@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1120377161;
+  int get rustContentHash => -1468179889;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -75,10 +75,23 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<ClaimPsbt> crateApiBuildClaimPsbt({
+    required String vaultJson,
+    required String electrumUrl,
+    required String destinationAddress,
+    required BigInt heirIndex,
+    required BigInt feeRateSatVb,
+  });
+
   Future<ClaimEligibility> crateApiCheckEligibility({
     required String vaultJson,
     required BigInt currentHeight,
     required BigInt confirmationHeight,
+  });
+
+  Future<VaultStatus> crateApiFetchVaultStatus({
+    required String vaultJson,
+    required String electrumUrl,
   });
 
   Future<VaultInfo> crateApiImportVaultBackup({required String json});
@@ -98,6 +111,58 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<ClaimPsbt> crateApiBuildClaimPsbt({
+    required String vaultJson,
+    required String electrumUrl,
+    required String destinationAddress,
+    required BigInt heirIndex,
+    required BigInt feeRateSatVb,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultJson, serializer);
+          sse_encode_String(electrumUrl, serializer);
+          sse_encode_String(destinationAddress, serializer);
+          sse_encode_usize(heirIndex, serializer);
+          sse_encode_u_64(feeRateSatVb, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_claim_psbt,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiBuildClaimPsbtConstMeta,
+        argValues: [
+          vaultJson,
+          electrumUrl,
+          destinationAddress,
+          heirIndex,
+          feeRateSatVb,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiBuildClaimPsbtConstMeta => const TaskConstMeta(
+    debugName: "build_claim_psbt",
+    argNames: [
+      "vaultJson",
+      "electrumUrl",
+      "destinationAddress",
+      "heirIndex",
+      "feeRateSatVb",
+    ],
+  );
+
+  @override
   Future<ClaimEligibility> crateApiCheckEligibility({
     required String vaultJson,
     required BigInt currentHeight,
@@ -113,7 +178,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 2,
             port: port_,
           );
         },
@@ -134,6 +199,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<VaultStatus> crateApiFetchVaultStatus({
+    required String vaultJson,
+    required String electrumUrl,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultJson, serializer);
+          sse_encode_String(electrumUrl, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_vault_status,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiFetchVaultStatusConstMeta,
+        argValues: [vaultJson, electrumUrl],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFetchVaultStatusConstMeta => const TaskConstMeta(
+    debugName: "fetch_vault_status",
+    argNames: ["vaultJson", "electrumUrl"],
+  );
+
+  @override
   Future<VaultInfo> crateApiImportVaultBackup({required String json}) {
     return handler.executeNormal(
       NormalTask(
@@ -143,7 +242,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 4,
             port: port_,
           );
         },
@@ -175,7 +274,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 5,
             port: port_,
           );
         },
@@ -217,6 +316,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       eligible: dco_decode_bool(arr[0]),
       blocksRemaining: dco_decode_i_64(arr[1]),
       daysRemaining: dco_decode_f_64(arr[2]),
+    );
+  }
+
+  @protected
+  ClaimPsbt dco_decode_claim_psbt(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ClaimPsbt(
+      psbtBase64: dco_decode_String(arr[0]),
+      totalInputSat: dco_decode_u_64(arr[1]),
+      feeSat: dco_decode_u_64(arr[2]),
+      outputSat: dco_decode_u_64(arr[3]),
+      destination: dco_decode_String(arr[4]),
+      numInputs: dco_decode_usize(arr[5]),
     );
   }
 
@@ -286,6 +401,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VaultStatus dco_decode_vault_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return VaultStatus(
+      balanceSat: dco_decode_u_64(arr[0]),
+      utxoCount: dco_decode_usize(arr[1]),
+      currentHeight: dco_decode_u_64(arr[2]),
+      confirmationHeight: dco_decode_u_64(arr[3]),
+      eligible: dco_decode_bool(arr[4]),
+      blocksRemaining: dco_decode_i_64(arr[5]),
+      daysRemaining: dco_decode_f_64(arr[6]),
+    );
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
@@ -308,6 +440,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       eligible: var_eligible,
       blocksRemaining: var_blocksRemaining,
       daysRemaining: var_daysRemaining,
+    );
+  }
+
+  @protected
+  ClaimPsbt sse_decode_claim_psbt(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_psbtBase64 = sse_decode_String(deserializer);
+    var var_totalInputSat = sse_decode_u_64(deserializer);
+    var var_feeSat = sse_decode_u_64(deserializer);
+    var var_outputSat = sse_decode_u_64(deserializer);
+    var var_destination = sse_decode_String(deserializer);
+    var var_numInputs = sse_decode_usize(deserializer);
+    return ClaimPsbt(
+      psbtBase64: var_psbtBase64,
+      totalInputSat: var_totalInputSat,
+      feeSat: var_feeSat,
+      outputSat: var_outputSat,
+      destination: var_destination,
+      numInputs: var_numInputs,
     );
   }
 
@@ -388,6 +539,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VaultStatus sse_decode_vault_status(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_balanceSat = sse_decode_u_64(deserializer);
+    var var_utxoCount = sse_decode_usize(deserializer);
+    var var_currentHeight = sse_decode_u_64(deserializer);
+    var var_confirmationHeight = sse_decode_u_64(deserializer);
+    var var_eligible = sse_decode_bool(deserializer);
+    var var_blocksRemaining = sse_decode_i_64(deserializer);
+    var var_daysRemaining = sse_decode_f_64(deserializer);
+    return VaultStatus(
+      balanceSat: var_balanceSat,
+      utxoCount: var_utxoCount,
+      currentHeight: var_currentHeight,
+      confirmationHeight: var_confirmationHeight,
+      eligible: var_eligible,
+      blocksRemaining: var_blocksRemaining,
+      daysRemaining: var_daysRemaining,
+    );
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
@@ -414,6 +586,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.eligible, serializer);
     sse_encode_i_64(self.blocksRemaining, serializer);
     sse_encode_f_64(self.daysRemaining, serializer);
+  }
+
+  @protected
+  void sse_encode_claim_psbt(ClaimPsbt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.psbtBase64, serializer);
+    sse_encode_u_64(self.totalInputSat, serializer);
+    sse_encode_u_64(self.feeSat, serializer);
+    sse_encode_u_64(self.outputSat, serializer);
+    sse_encode_String(self.destination, serializer);
+    sse_encode_usize(self.numInputs, serializer);
   }
 
   @protected
@@ -481,6 +664,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.heirLabels, serializer);
     sse_encode_bool(self.hasRecoveryLeaves, serializer);
     sse_encode_bool(self.addressVerified, serializer);
+  }
+
+  @protected
+  void sse_encode_vault_status(VaultStatus self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.balanceSat, serializer);
+    sse_encode_usize(self.utxoCount, serializer);
+    sse_encode_u_64(self.currentHeight, serializer);
+    sse_encode_u_64(self.confirmationHeight, serializer);
+    sse_encode_bool(self.eligible, serializer);
+    sse_encode_i_64(self.blocksRemaining, serializer);
+    sse_encode_f_64(self.daysRemaining, serializer);
   }
 
   @protected

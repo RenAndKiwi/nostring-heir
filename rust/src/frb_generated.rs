@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1120377161;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1468179889;
 
 // Section: executor
 
@@ -45,6 +45,49 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__build_claim_psbt_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "build_claim_psbt",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_vault_json = <String>::sse_decode(&mut deserializer);
+            let api_electrum_url = <String>::sse_decode(&mut deserializer);
+            let api_destination_address = <String>::sse_decode(&mut deserializer);
+            let api_heir_index = <usize>::sse_decode(&mut deserializer);
+            let api_fee_rate_sat_vb = <u64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::build_claim_psbt(
+                        api_vault_json,
+                        api_electrum_url,
+                        api_destination_address,
+                        api_heir_index,
+                        api_fee_rate_sat_vb,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__check_eligibility_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -78,6 +121,41 @@ fn wire__crate__api__check_eligibility_impl(
                         api_current_height,
                         api_confirmation_height,
                     )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__fetch_vault_status_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "fetch_vault_status",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_vault_json = <String>::sse_decode(&mut deserializer);
+            let api_electrum_url = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::fetch_vault_status(api_vault_json, api_electrum_url)?;
                     Ok(output_ok)
                 })())
             }
@@ -183,6 +261,26 @@ impl SseDecode for crate::api::ClaimEligibility {
     }
 }
 
+impl SseDecode for crate::api::ClaimPsbt {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_psbtBase64 = <String>::sse_decode(deserializer);
+        let mut var_totalInputSat = <u64>::sse_decode(deserializer);
+        let mut var_feeSat = <u64>::sse_decode(deserializer);
+        let mut var_outputSat = <u64>::sse_decode(deserializer);
+        let mut var_destination = <String>::sse_decode(deserializer);
+        let mut var_numInputs = <usize>::sse_decode(deserializer);
+        return crate::api::ClaimPsbt {
+            psbt_base64: var_psbtBase64,
+            total_input_sat: var_totalInputSat,
+            fee_sat: var_feeSat,
+            output_sat: var_outputSat,
+            destination: var_destination,
+            num_inputs: var_numInputs,
+        };
+    }
+}
+
 impl SseDecode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -271,6 +369,28 @@ impl SseDecode for crate::api::VaultInfo {
     }
 }
 
+impl SseDecode for crate::api::VaultStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_balanceSat = <u64>::sse_decode(deserializer);
+        let mut var_utxoCount = <usize>::sse_decode(deserializer);
+        let mut var_currentHeight = <u64>::sse_decode(deserializer);
+        let mut var_confirmationHeight = <u64>::sse_decode(deserializer);
+        let mut var_eligible = <bool>::sse_decode(deserializer);
+        let mut var_blocksRemaining = <i64>::sse_decode(deserializer);
+        let mut var_daysRemaining = <f64>::sse_decode(deserializer);
+        return crate::api::VaultStatus {
+            balance_sat: var_balanceSat,
+            utxo_count: var_utxoCount,
+            current_height: var_currentHeight,
+            confirmation_height: var_confirmationHeight,
+            eligible: var_eligible,
+            blocks_remaining: var_blocksRemaining,
+            days_remaining: var_daysRemaining,
+        };
+    }
+}
+
 impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -287,9 +407,11 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__check_eligibility_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__import_vault_backup_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__validate_address_impl(port, ptr, rust_vec_len, data_len),
+        1 => wire__crate__api__build_claim_psbt_impl(port, ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__check_eligibility_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__fetch_vault_status_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__import_vault_backup_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__validate_address_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -328,6 +450,26 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::ClaimEligibility>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ClaimPsbt {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.psbt_base64.into_into_dart().into_dart(),
+            self.total_input_sat.into_into_dart().into_dart(),
+            self.fee_sat.into_into_dart().into_dart(),
+            self.output_sat.into_into_dart().into_dart(),
+            self.destination.into_into_dart().into_dart(),
+            self.num_inputs.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ClaimPsbt {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ClaimPsbt> for crate::api::ClaimPsbt {
+    fn into_into_dart(self) -> crate::api::ClaimPsbt {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::VaultInfo {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -345,6 +487,27 @@ impl flutter_rust_bridge::IntoDart for crate::api::VaultInfo {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::VaultInfo {}
 impl flutter_rust_bridge::IntoIntoDart<crate::api::VaultInfo> for crate::api::VaultInfo {
     fn into_into_dart(self) -> crate::api::VaultInfo {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::VaultStatus {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.balance_sat.into_into_dart().into_dart(),
+            self.utxo_count.into_into_dart().into_dart(),
+            self.current_height.into_into_dart().into_dart(),
+            self.confirmation_height.into_into_dart().into_dart(),
+            self.eligible.into_into_dart().into_dart(),
+            self.blocks_remaining.into_into_dart().into_dart(),
+            self.days_remaining.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::VaultStatus {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::VaultStatus> for crate::api::VaultStatus {
+    fn into_into_dart(self) -> crate::api::VaultStatus {
         self
     }
 }
@@ -369,6 +532,18 @@ impl SseEncode for crate::api::ClaimEligibility {
         <bool>::sse_encode(self.eligible, serializer);
         <i64>::sse_encode(self.blocks_remaining, serializer);
         <f64>::sse_encode(self.days_remaining, serializer);
+    }
+}
+
+impl SseEncode for crate::api::ClaimPsbt {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.psbt_base64, serializer);
+        <u64>::sse_encode(self.total_input_sat, serializer);
+        <u64>::sse_encode(self.fee_sat, serializer);
+        <u64>::sse_encode(self.output_sat, serializer);
+        <String>::sse_encode(self.destination, serializer);
+        <usize>::sse_encode(self.num_inputs, serializer);
     }
 }
 
@@ -447,6 +622,19 @@ impl SseEncode for crate::api::VaultInfo {
         <Vec<String>>::sse_encode(self.heir_labels, serializer);
         <bool>::sse_encode(self.has_recovery_leaves, serializer);
         <bool>::sse_encode(self.address_verified, serializer);
+    }
+}
+
+impl SseEncode for crate::api::VaultStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.balance_sat, serializer);
+        <usize>::sse_encode(self.utxo_count, serializer);
+        <u64>::sse_encode(self.current_height, serializer);
+        <u64>::sse_encode(self.confirmation_height, serializer);
+        <bool>::sse_encode(self.eligible, serializer);
+        <i64>::sse_encode(self.blocks_remaining, serializer);
+        <f64>::sse_encode(self.days_remaining, serializer);
     }
 }
 

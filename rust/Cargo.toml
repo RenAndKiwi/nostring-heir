@@ -14,6 +14,9 @@ serde_json = "1"
 # NoString workspace crates (path deps for local dev)
 nostring-inherit = { path = "../../nostring/crates/nostring-inherit" }
 nostring-ccd = { path = "../../nostring/crates/nostring-ccd" }
+nostring-electrum = { path = "../../nostring/crates/nostring-electrum" }
 bitcoin = { version = "0.32", features = ["serde"] }
 hex = "0.4"
+base64 = "0.22"
 miniscript = { version = "12", features = ["serde"] }
+rustls = "0.23"

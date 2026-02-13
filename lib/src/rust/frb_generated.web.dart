@@ -30,6 +30,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ClaimEligibility dco_decode_claim_eligibility(dynamic raw);
 
   @protected
+  ClaimPsbt dco_decode_claim_psbt(dynamic raw);
+
+  @protected
   double dco_decode_f_64(dynamic raw);
 
   @protected
@@ -57,6 +60,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VaultInfo dco_decode_vault_info(dynamic raw);
 
   @protected
+  VaultStatus dco_decode_vault_status(dynamic raw);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
@@ -64,6 +70,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ClaimEligibility sse_decode_claim_eligibility(SseDeserializer deserializer);
+
+  @protected
+  ClaimPsbt sse_decode_claim_psbt(SseDeserializer deserializer);
 
   @protected
   double sse_decode_f_64(SseDeserializer deserializer);
@@ -93,6 +102,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VaultInfo sse_decode_vault_info(SseDeserializer deserializer);
 
   @protected
+  VaultStatus sse_decode_vault_status(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
@@ -106,6 +118,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ClaimEligibility self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_claim_psbt(ClaimPsbt self, SseSerializer serializer);
 
   @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
@@ -136,6 +151,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_vault_info(VaultInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_vault_status(VaultStatus self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
