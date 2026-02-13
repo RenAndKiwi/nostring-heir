@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1468179889;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2105998238;
 
 // Section: executor
 
@@ -45,6 +45,45 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__broadcast_transaction_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "broadcast_transaction",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_tx_hex = <String>::sse_decode(&mut deserializer);
+            let api_electrum_url = <String>::sse_decode(&mut deserializer);
+            let api_network = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::broadcast_transaction(
+                        api_tx_hex,
+                        api_electrum_url,
+                        api_network,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__build_claim_psbt_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -162,6 +201,39 @@ fn wire__crate__api__fetch_vault_status_impl(
         },
     )
 }
+fn wire__crate__api__finalize_psbt_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "finalize_psbt",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_psbt_base64 = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::finalize_psbt(api_psbt_base64)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__import_vault_backup_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -247,6 +319,18 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for crate::api::BroadcastResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_txid = <String>::sse_decode(deserializer);
+        let mut var_success = <bool>::sse_decode(deserializer);
+        return crate::api::BroadcastResult {
+            txid: var_txid,
+            success: var_success,
+        };
+    }
+}
+
 impl SseDecode for crate::api::ClaimEligibility {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -285,6 +369,24 @@ impl SseDecode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_f64::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for crate::api::FinalizedTx {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_txHex = <String>::sse_decode(deserializer);
+        let mut var_txid = <String>::sse_decode(deserializer);
+        let mut var_totalOutputSat = <u64>::sse_decode(deserializer);
+        let mut var_numInputs = <usize>::sse_decode(deserializer);
+        let mut var_numOutputs = <usize>::sse_decode(deserializer);
+        return crate::api::FinalizedTx {
+            tx_hex: var_txHex,
+            txid: var_txid,
+            total_output_sat: var_totalOutputSat,
+            num_inputs: var_numInputs,
+            num_outputs: var_numOutputs,
+        };
     }
 }
 
@@ -407,11 +509,13 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__build_claim_psbt_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__check_eligibility_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__fetch_vault_status_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__import_vault_backup_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__validate_address_impl(port, ptr, rust_vec_len, data_len),
+        1 => wire__crate__api__broadcast_transaction_impl(port, ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__build_claim_psbt_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__check_eligibility_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__fetch_vault_status_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__finalize_psbt_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__import_vault_backup_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__validate_address_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -430,6 +534,24 @@ fn pde_ffi_dispatcher_sync_impl(
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::BroadcastResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.txid.into_into_dart().into_dart(),
+            self.success.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::BroadcastResult {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::BroadcastResult>
+    for crate::api::BroadcastResult
+{
+    fn into_into_dart(self) -> crate::api::BroadcastResult {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::ClaimEligibility {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -466,6 +588,25 @@ impl flutter_rust_bridge::IntoDart for crate::api::ClaimPsbt {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ClaimPsbt {}
 impl flutter_rust_bridge::IntoIntoDart<crate::api::ClaimPsbt> for crate::api::ClaimPsbt {
     fn into_into_dart(self) -> crate::api::ClaimPsbt {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::FinalizedTx {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.tx_hex.into_into_dart().into_dart(),
+            self.txid.into_into_dart().into_dart(),
+            self.total_output_sat.into_into_dart().into_dart(),
+            self.num_inputs.into_into_dart().into_dart(),
+            self.num_outputs.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::FinalizedTx {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::FinalizedTx> for crate::api::FinalizedTx {
+    fn into_into_dart(self) -> crate::api::FinalizedTx {
         self
     }
 }
@@ -526,6 +667,14 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for crate::api::BroadcastResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.txid, serializer);
+        <bool>::sse_encode(self.success, serializer);
+    }
+}
+
 impl SseEncode for crate::api::ClaimEligibility {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -551,6 +700,17 @@ impl SseEncode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::FinalizedTx {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.tx_hex, serializer);
+        <String>::sse_encode(self.txid, serializer);
+        <u64>::sse_encode(self.total_output_sat, serializer);
+        <usize>::sse_encode(self.num_inputs, serializer);
+        <usize>::sse_encode(self.num_outputs, serializer);
     }
 }
 

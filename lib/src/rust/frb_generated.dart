@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1468179889;
+  int get rustContentHash => -2105998238;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -75,6 +75,12 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<BroadcastResult> crateApiBroadcastTransaction({
+    required String txHex,
+    required String electrumUrl,
+    required String network,
+  });
+
   Future<ClaimPsbt> crateApiBuildClaimPsbt({
     required String vaultJson,
     required String electrumUrl,
@@ -94,6 +100,8 @@ abstract class RustLibApi extends BaseApi {
     required String electrumUrl,
   });
 
+  Future<FinalizedTx> crateApiFinalizePsbt({required String psbtBase64});
+
   Future<VaultInfo> crateApiImportVaultBackup({required String json});
 
   Future<bool> crateApiValidateAddress({
@@ -109,6 +117,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
+
+  @override
+  Future<BroadcastResult> crateApiBroadcastTransaction({
+    required String txHex,
+    required String electrumUrl,
+    required String network,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(txHex, serializer);
+          sse_encode_String(electrumUrl, serializer);
+          sse_encode_String(network, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_broadcast_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiBroadcastTransactionConstMeta,
+        argValues: [txHex, electrumUrl, network],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiBroadcastTransactionConstMeta =>
+      const TaskConstMeta(
+        debugName: "broadcast_transaction",
+        argNames: ["txHex", "electrumUrl", "network"],
+      );
 
   @override
   Future<ClaimPsbt> crateApiBuildClaimPsbt({
@@ -130,7 +175,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 2,
             port: port_,
           );
         },
@@ -178,7 +223,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 3,
             port: port_,
           );
         },
@@ -212,7 +257,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -233,6 +278,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<FinalizedTx> crateApiFinalizePsbt({required String psbtBase64}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(psbtBase64, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_finalized_tx,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiFinalizePsbtConstMeta,
+        argValues: [psbtBase64],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFinalizePsbtConstMeta =>
+      const TaskConstMeta(debugName: "finalize_psbt", argNames: ["psbtBase64"]);
+
+  @override
   Future<VaultInfo> crateApiImportVaultBackup({required String json}) {
     return handler.executeNormal(
       NormalTask(
@@ -242,7 +315,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 6,
             port: port_,
           );
         },
@@ -274,7 +347,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 7,
             port: port_,
           );
         },
@@ -304,6 +377,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool dco_decode_bool(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as bool;
+  }
+
+  @protected
+  BroadcastResult dco_decode_broadcast_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return BroadcastResult(
+      txid: dco_decode_String(arr[0]),
+      success: dco_decode_bool(arr[1]),
+    );
   }
 
   @protected
@@ -339,6 +424,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double dco_decode_f_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
+  }
+
+  @protected
+  FinalizedTx dco_decode_finalized_tx(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return FinalizedTx(
+      txHex: dco_decode_String(arr[0]),
+      txid: dco_decode_String(arr[1]),
+      totalOutputSat: dco_decode_u_64(arr[2]),
+      numInputs: dco_decode_usize(arr[3]),
+      numOutputs: dco_decode_usize(arr[4]),
+    );
   }
 
   @protected
@@ -431,6 +531,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BroadcastResult sse_decode_broadcast_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_txid = sse_decode_String(deserializer);
+    var var_success = sse_decode_bool(deserializer);
+    return BroadcastResult(txid: var_txid, success: var_success);
+  }
+
+  @protected
   ClaimEligibility sse_decode_claim_eligibility(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_eligible = sse_decode_bool(deserializer);
@@ -466,6 +574,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double sse_decode_f_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat64();
+  }
+
+  @protected
+  FinalizedTx sse_decode_finalized_tx(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_txHex = sse_decode_String(deserializer);
+    var var_txid = sse_decode_String(deserializer);
+    var var_totalOutputSat = sse_decode_u_64(deserializer);
+    var var_numInputs = sse_decode_usize(deserializer);
+    var var_numOutputs = sse_decode_usize(deserializer);
+    return FinalizedTx(
+      txHex: var_txHex,
+      txid: var_txid,
+      totalOutputSat: var_totalOutputSat,
+      numInputs: var_numInputs,
+      numOutputs: var_numOutputs,
+    );
   }
 
   @protected
@@ -578,6 +703,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_broadcast_result(
+    BroadcastResult self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.txid, serializer);
+    sse_encode_bool(self.success, serializer);
+  }
+
+  @protected
   void sse_encode_claim_eligibility(
     ClaimEligibility self,
     SseSerializer serializer,
@@ -603,6 +738,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_f_64(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat64(self);
+  }
+
+  @protected
+  void sse_encode_finalized_tx(FinalizedTx self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.txHex, serializer);
+    sse_encode_String(self.txid, serializer);
+    sse_encode_u_64(self.totalOutputSat, serializer);
+    sse_encode_usize(self.numInputs, serializer);
+    sse_encode_usize(self.numOutputs, serializer);
   }
 
   @protected

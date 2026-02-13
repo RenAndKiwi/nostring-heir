@@ -258,6 +258,127 @@ pub fn build_claim_psbt(
     })
 }
 
+/// Finalized transaction ready for broadcast.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinalizedTx {
+    pub tx_hex: String,
+    pub txid: String,
+    pub total_output_sat: u64,
+    pub num_inputs: usize,
+    pub num_outputs: usize,
+}
+
+/// Result of broadcasting a transaction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BroadcastResult {
+    pub txid: String,
+    pub success: bool,
+}
+
+/// Validate a signed PSBT and extract the finalized transaction.
+///
+/// The PSBT must have all inputs signed (witness data present).
+/// Returns the raw transaction hex and a summary for review before broadcast.
+pub fn finalize_psbt(psbt_base64: String) -> Result<FinalizedTx, String> {
+    use base64::Engine;
+    use bitcoin::consensus::{Decodable, Encodable};
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&psbt_base64)
+        .map_err(|e| format!("Invalid base64: {}", e))?;
+
+    let psbt = bitcoin::Psbt::deserialize(&bytes)
+        .map_err(|e| format!("Invalid PSBT: {}", e))?;
+
+    // Check each input for signature status — give human-friendly errors
+    let total_inputs = psbt.inputs.len();
+    let signed_count = psbt.inputs.iter().filter(|input| {
+        // An input is "signed" if it has final_script_witness or final_script_sig,
+        // OR if it has tap_key_sig or any tap_script_sigs
+        input.final_script_witness.is_some()
+            || input.final_script_sig.is_some()
+            || input.tap_key_sig.is_some()
+            || !input.tap_script_sigs.is_empty()
+            || !input.partial_sigs.is_empty()
+    }).count();
+
+    if signed_count == 0 {
+        return Err(format!(
+            "This PSBT has not been signed yet. \
+             Please sign it with your wallet (Sparrow, hardware wallet, etc.) \
+             before importing it here. \
+             ({} input(s) need signing.)",
+            total_inputs
+        ));
+    }
+
+    if signed_count < total_inputs {
+        return Err(format!(
+            "This PSBT is only partially signed: {} of {} inputs have signatures. \
+             All inputs must be signed before broadcasting. \
+             Please complete signing with your wallet.",
+            signed_count, total_inputs
+        ));
+    }
+
+    // All inputs signed — extract the finalized transaction
+    let tx = psbt
+        .extract_tx()
+        .map_err(|e| format!(
+            "Could not finalize the transaction even though all inputs appear signed. \
+             This usually means the signature format is wrong. Error: {}", e
+        ))?;
+
+    let txid = tx.compute_txid().to_string();
+    let total_output_sat: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
+    let num_inputs = tx.input.len();
+    let num_outputs = tx.output.len();
+
+    // Serialize to hex
+    let mut buf = Vec::new();
+    tx.consensus_encode(&mut buf)
+        .map_err(|e| format!("Transaction serialization failed: {}", e))?;
+    let tx_hex = hex::encode(&buf);
+
+    Ok(FinalizedTx {
+        tx_hex,
+        txid,
+        total_output_sat,
+        num_inputs,
+        num_outputs,
+    })
+}
+
+/// Broadcast a finalized transaction to the Bitcoin network via Electrum.
+pub fn broadcast_transaction(
+    tx_hex: String,
+    electrum_url: String,
+    network: String,
+) -> Result<BroadcastResult, String> {
+    use bitcoin::consensus::{Decodable, Encodable};
+
+    let net = parse_network(&network)?;
+
+    let tx_bytes =
+        hex::decode(&tx_hex).map_err(|e| format!("Invalid hex: {}", e))?;
+    let tx = bitcoin::Transaction::consensus_decode(&mut tx_bytes.as_slice())
+        .map_err(|e| format!("Invalid transaction: {}", e))?;
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let client = nostring_electrum::ElectrumClient::new(&electrum_url, net)
+        .map_err(|e| format!("Electrum connection failed: {}", e))?;
+
+    let txid = client
+        .broadcast(&tx)
+        .map_err(|e| format!("Broadcast failed: {}", e))?;
+
+    Ok(BroadcastResult {
+        txid: txid.to_string(),
+        success: true,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -447,6 +568,74 @@ mod tests {
     fn test_validate_invalid_address() {
         let result = validate_address("notanaddress".into(), "testnet".into());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_finalize_invalid_base64() {
+        let result = finalize_psbt("not-valid-base64!!!".into());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid base64"));
+    }
+
+    #[test]
+    fn test_finalize_unsigned_psbt() {
+        use base64::Engine;
+        // Construct a minimal valid but unsigned PSBT
+        let mut psbt = bitcoin::Psbt::from_unsigned_tx(
+            bitcoin::Transaction {
+                version: bitcoin::transaction::Version::TWO,
+                lock_time: bitcoin::blockdata::locktime::absolute::LockTime::ZERO,
+                input: vec![bitcoin::TxIn {
+                    previous_output: bitcoin::OutPoint::null(),
+                    ..Default::default()
+                }],
+                output: vec![bitcoin::TxOut {
+                    value: bitcoin::Amount::from_sat(1000),
+                    script_pubkey: bitcoin::ScriptBuf::new(),
+                }],
+            }
+        ).unwrap();
+        // Ensure it has one input entry
+        assert_eq!(psbt.inputs.len(), 1);
+
+        let psbt_bytes = psbt.serialize();
+        let psbt_b64 = base64::engine::general_purpose::STANDARD.encode(&psbt_bytes);
+
+        let result = finalize_psbt(psbt_b64);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("not been signed yet"), "Expected unsigned error, got: {}", err);
+        assert!(err.contains("1 input(s) need signing"), "Expected input count, got: {}", err);
+    }
+
+    #[test]
+    fn test_finalize_invalid_psbt() {
+        use base64::Engine;
+        let fake = base64::engine::general_purpose::STANDARD.encode(b"not a psbt");
+        let result = finalize_psbt(fake);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid PSBT"));
+    }
+
+    #[test]
+    fn test_broadcast_bad_electrum() {
+        let result = broadcast_transaction(
+            "0200000000".into(),
+            "ssl://nonexistent:50002".into(),
+            "bitcoin".into(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_broadcast_invalid_hex() {
+        let result = broadcast_transaction(
+            "not-hex".into(),
+            "ssl://electrum.blockstream.info:50002".into(),
+            "bitcoin".into(),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid hex"));
     }
 
     /// Integration test: connects to real Electrum testnet server.

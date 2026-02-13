@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parse_network`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Parse, validate, and VERIFY a VaultBackup JSON string.
 ///
@@ -62,6 +62,43 @@ Future<ClaimPsbt> buildClaimPsbt({
   heirIndex: heirIndex,
   feeRateSatVb: feeRateSatVb,
 );
+
+/// Validate a signed PSBT and extract the finalized transaction.
+///
+/// The PSBT must have all inputs signed (witness data present).
+/// Returns the raw transaction hex and a summary for review before broadcast.
+Future<FinalizedTx> finalizePsbt({required String psbtBase64}) =>
+    RustLib.instance.api.crateApiFinalizePsbt(psbtBase64: psbtBase64);
+
+/// Broadcast a finalized transaction to the Bitcoin network via Electrum.
+Future<BroadcastResult> broadcastTransaction({
+  required String txHex,
+  required String electrumUrl,
+  required String network,
+}) => RustLib.instance.api.crateApiBroadcastTransaction(
+  txHex: txHex,
+  electrumUrl: electrumUrl,
+  network: network,
+);
+
+/// Result of broadcasting a transaction.
+class BroadcastResult {
+  final String txid;
+  final bool success;
+
+  const BroadcastResult({required this.txid, required this.success});
+
+  @override
+  int get hashCode => txid.hashCode ^ success.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BroadcastResult &&
+          runtimeType == other.runtimeType &&
+          txid == other.txid &&
+          success == other.success;
+}
 
 /// Claim eligibility status.
 class ClaimEligibility {
@@ -127,6 +164,42 @@ class ClaimPsbt {
           outputSat == other.outputSat &&
           destination == other.destination &&
           numInputs == other.numInputs;
+}
+
+/// Finalized transaction ready for broadcast.
+class FinalizedTx {
+  final String txHex;
+  final String txid;
+  final BigInt totalOutputSat;
+  final BigInt numInputs;
+  final BigInt numOutputs;
+
+  const FinalizedTx({
+    required this.txHex,
+    required this.txid,
+    required this.totalOutputSat,
+    required this.numInputs,
+    required this.numOutputs,
+  });
+
+  @override
+  int get hashCode =>
+      txHex.hashCode ^
+      txid.hashCode ^
+      totalOutputSat.hashCode ^
+      numInputs.hashCode ^
+      numOutputs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FinalizedTx &&
+          runtimeType == other.runtimeType &&
+          txHex == other.txHex &&
+          txid == other.txid &&
+          totalOutputSat == other.totalOutputSat &&
+          numInputs == other.numInputs &&
+          numOutputs == other.numOutputs;
 }
 
 /// Vault summary returned after parsing and verifying a VaultBackup JSON.

@@ -25,6 +25,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  BroadcastResult dco_decode_broadcast_result(dynamic raw);
+
+  @protected
   ClaimEligibility dco_decode_claim_eligibility(dynamic raw);
 
   @protected
@@ -32,6 +35,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double dco_decode_f_64(dynamic raw);
+
+  @protected
+  FinalizedTx dco_decode_finalized_tx(dynamic raw);
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
@@ -67,6 +73,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  BroadcastResult sse_decode_broadcast_result(SseDeserializer deserializer);
+
+  @protected
   ClaimEligibility sse_decode_claim_eligibility(SseDeserializer deserializer);
 
   @protected
@@ -74,6 +83,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
+  FinalizedTx sse_decode_finalized_tx(SseDeserializer deserializer);
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
@@ -112,6 +124,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_broadcast_result(
+    BroadcastResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_claim_eligibility(
     ClaimEligibility self,
     SseSerializer serializer,
@@ -122,6 +140,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_finalized_tx(FinalizedTx self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);

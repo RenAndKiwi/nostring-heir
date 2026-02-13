@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../src/rust/api.dart' as api;
+import 'broadcast_screen.dart';
 
 class ClaimScreen extends StatefulWidget {
   final String vaultJson;
@@ -180,6 +181,26 @@ class _ClaimScreenState extends State<ClaimScreen> {
           icon: const Icon(Icons.copy),
           label: const Text('Copy PSBT (Base64)'),
           style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BroadcastScreen(
+                  electrumUrl: widget.electrumUrl,
+                  network: widget.network,
+                ),
+              ),
+            );
+          },
+          icon: const Icon(Icons.arrow_forward),
+          label: const Text("I've Signed It — Broadcast"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
             padding: const EdgeInsets.symmetric(vertical: 16),
           ),
         ),
