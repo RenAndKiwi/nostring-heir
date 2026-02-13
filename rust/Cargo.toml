@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
+crate-type = ["staticlib", "cdylib", "lib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.11.1"
@@ -20,3 +20,6 @@ hex = "0.4"
 base64 = "0.22"
 miniscript = { version = "12", features = ["serde"] }
 rustls = "0.23"
+
+[dev-dependencies]
+bitcoinconsensus = "0.106"
