@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../src/rust/api.dart';
+import '../theme/nostring_theme.dart';
+import '../widgets/gold_gradient_text.dart';
+import '../widgets/info_row.dart';
+import '../widgets/status_badge.dart';
 import 'status_screen.dart';
 
 class ImportScreen extends StatefulWidget {
@@ -42,34 +46,41 @@ class _ImportScreenState extends State<ImportScreen> {
     }
   }
 
+  void _navigateToStatus() {
+    final net = _vaultInfo!.network;
+    final defaultElectrum = net == 'testnet'
+        ? 'ssl://electrum.blockstream.info:60002'
+        : net == 'signet'
+            ? 'ssl://mempool.space:60602'
+            : 'ssl://electrum.blockstream.info:50002';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StatusScreen(
+          vaultJson: _controller.text.trim(),
+          electrumUrl: defaultElectrum,
+          network: net,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      appBar: AppBar(
-        title: const Text('NoString Heir'),
-        backgroundColor: const Color(0xFF1A1A1A),
-        foregroundColor: const Color(0xFFF7931A),
-      ),
+      appBar: AppBar(title: const Text('NoString Heir')),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(NoStringSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Import Vault Backup',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const GoldGradientText('Import Vault Backup'),
+            const SizedBox(height: NoStringSpacing.sm),
             const Text(
               'Paste the VaultBackup JSON from the vault owner.',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: NoStringColors.textMuted),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: NoStringSpacing.lg),
             Expanded(
               child: TextField(
                 controller: _controller,
@@ -79,129 +90,34 @@ class _ImportScreenState extends State<ImportScreen> {
                 style: const TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 12,
-                  color: Colors.white,
+                  color: NoStringColors.textPrimary,
                 ),
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   hintText: '{"version": 1, "network": "testnet", ...}',
-                  hintStyle: TextStyle(color: Colors.grey.shade700),
-                  filled: true,
-                  fillColor: const Color(0xFF1A1A1A),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF333333)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF333333)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFFF7931A)),
-                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: NoStringSpacing.lg),
             ElevatedButton(
               onPressed: _loading ? null : _handleImport,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF7931A),
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
               child: _loading
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black,
+                      ),
                     )
-                  : const Text(
-                      'Import Backup',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                  : const Text('Verify & Import'),
             ),
             if (_error != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2D0D0D),
-                  border: Border.all(color: const Color(0xFF5C1A1A)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: Color(0xFFF87171)),
-                ),
-              ),
+              const SizedBox(height: NoStringSpacing.lg),
+              _buildError(),
             ],
             if (_vaultInfo != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D2818),
-                  border: Border.all(color: const Color(0xFF1A5C2E)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '✅ Vault Imported',
-                      style: TextStyle(
-                        color: Color(0xFF4ADE80),
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _infoRow('Network', _vaultInfo!.network),
-                    _infoRow('Address', _vaultInfo!.vaultAddress),
-                    _infoRow('Timelock',
-                        '${_vaultInfo!.timelockBlocks} blocks'),
-                    _infoRow('Heirs',
-                        _vaultInfo!.heirLabels.join(', ')),
-                    _infoRow('Recovery Data',
-                        _vaultInfo!.hasRecoveryLeaves ? 'Yes' : 'No'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: () {
-                  final net = _vaultInfo!.network;
-                  final defaultElectrum = net == 'testnet'
-                      ? 'ssl://electrum.blockstream.info:60002'
-                      : net == 'signet'
-                          ? 'ssl://mempool.space:60602'
-                          : 'ssl://electrum.blockstream.info:50002';
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => StatusScreen(
-                        network: net,
-                        vaultJson: _controller.text.trim(),
-                        electrumUrl: defaultElectrum,
-                      ),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.search),
-                label: const Text('Check Vault Status'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A5C2E),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
+              const SizedBox(height: NoStringSpacing.lg),
+              _buildSuccess(),
             ],
           ],
         ),
@@ -209,30 +125,79 @@ class _ImportScreenState extends State<ImportScreen> {
     );
   }
 
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+  Widget _buildError() {
+    return Container(
+      padding: const EdgeInsets.all(NoStringSpacing.md),
+      decoration: BoxDecoration(
+        color: NoStringColors.error.withValues(alpha: 0.1),
+        border: Border.all(color: NoStringColors.error.withValues(alpha: 0.3)),
+        borderRadius: NoStringRadius.md,
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-          ),
+          const Icon(Icons.error_outline, color: NoStringColors.error, size: 20),
+          const SizedBox(width: NoStringSpacing.sm),
           Expanded(
             child: Text(
-              value,
-              style: const TextStyle(
-                color: Color(0xFFF7931A),
-                fontFamily: 'monospace',
-                fontSize: 13,
-              ),
+              _error!,
+              style: const TextStyle(color: NoStringColors.error, fontSize: 13),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSuccess() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(NoStringSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.verified, color: NoStringColors.success, size: 24),
+                const SizedBox(width: NoStringSpacing.sm),
+                const Text(
+                  'Vault Verified',
+                  style: TextStyle(
+                    color: NoStringColors.success,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                StatusBadge(
+                  label: _vaultInfo!.network.toUpperCase(),
+                  type: _vaultInfo!.network == 'bitcoin'
+                      ? BadgeType.success
+                      : BadgeType.warning,
+                ),
+              ],
+            ),
+            const SizedBox(height: NoStringSpacing.md),
+            InfoRow(label: 'Address', value: _vaultInfo!.vaultAddress, mono: true),
+            InfoRow(
+              label: 'Timelock',
+              value: '${_vaultInfo!.timelockBlocks} blocks (~${(_vaultInfo!.timelockBlocks / 144).toStringAsFixed(0)} days)',
+            ),
+            InfoRow(label: 'Heirs', value: _vaultInfo!.heirLabels.join(', ')),
+            InfoRow(
+              label: 'Recovery Data',
+              value: _vaultInfo!.hasRecoveryLeaves ? 'Included' : 'Missing',
+            ),
+            const SizedBox(height: NoStringSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _navigateToStatus,
+                icon: const Icon(Icons.search),
+                label: const Text('Check Vault Status'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

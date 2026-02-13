@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../src/rust/api.dart' as api;
+import '../theme/nostring_theme.dart';
+import '../widgets/gold_gradient_text.dart';
+import '../widgets/info_row.dart';
+import '../widgets/section_header.dart';
 import 'broadcast_screen.dart';
 
 class ClaimScreen extends StatefulWidget {
@@ -71,7 +75,7 @@ class _ClaimScreenState extends State<ClaimScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Claim Funds')),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(NoStringSpacing.lg),
         child: _psbt != null ? _buildResult() : _buildForm(),
       ),
     );
@@ -81,37 +85,54 @@ class _ClaimScreenState extends State<ClaimScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Where should the funds be sent?',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        const SectionHeader(
+          title: 'Where should the funds go?',
+          subtitle: 'Enter your Bitcoin address. This is where your inheritance will be sent.',
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: NoStringSpacing.xl),
         TextField(
           controller: _addressController,
           decoration: const InputDecoration(
-            labelText: 'Destination Bitcoin Address',
+            labelText: 'Destination Address',
             hintText: 'bc1q... or tb1q...',
-            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.account_balance_wallet, color: NoStringColors.goldLight),
           ),
         ),
-        const SizedBox(height: 16),
-        Text('Fee Rate: ${_feeRate.round()} sat/vB'),
+        const SizedBox(height: NoStringSpacing.xl),
+        Row(
+          children: [
+            const Text('Fee Rate', style: TextStyle(color: NoStringColors.textMuted)),
+            const Spacer(),
+            Text(
+              '${_feeRate.round()} sat/vB',
+              style: const TextStyle(
+                color: NoStringColors.goldLight,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
         Slider(
           value: _feeRate,
           min: 1,
           max: 100,
           divisions: 99,
-          label: '${_feeRate.round()} sat/vB',
           onChanged: (v) => setState(() => _feeRate = v),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Heir Index: $_heirIndex',
-          style: const TextStyle(color: Colors.grey),
-        ),
         if (_error != null) ...[
-          const SizedBox(height: 16),
-          Text(_error!, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: NoStringSpacing.lg),
+          Container(
+            padding: const EdgeInsets.all(NoStringSpacing.md),
+            decoration: BoxDecoration(
+              color: NoStringColors.error.withValues(alpha: 0.1),
+              border: Border.all(color: NoStringColors.error.withValues(alpha: 0.3)),
+              borderRadius: NoStringRadius.md,
+            ),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: NoStringColors.error, fontSize: 13),
+            ),
+          ),
         ],
         const Spacer(),
         ElevatedButton.icon(
@@ -120,13 +141,10 @@ class _ClaimScreenState extends State<ClaimScreen> {
               ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                 )
               : const Icon(Icons.build),
           label: Text(_building ? 'Building...' : 'Build Unsigned PSBT'),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-          ),
         ),
       ],
     );
@@ -137,40 +155,37 @@ class _ClaimScreenState extends State<ClaimScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.check_circle, size: 48, color: Colors.green),
-        const SizedBox(height: 12),
-        const Text(
+        const SizedBox(height: NoStringSpacing.xl),
+        const Icon(Icons.check_circle, size: 56, color: NoStringColors.success),
+        const SizedBox(height: NoStringSpacing.md),
+        const GoldGradientText(
           'Unsigned PSBT Ready',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          fontSize: 22,
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: NoStringSpacing.xl),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(NoStringSpacing.lg),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _row('Inputs', '${p.numInputs}'),
-                _row('Total In', '${p.totalInputSat} sats'),
-                _row('Fee', '${p.feeSat} sats'),
-                _row('Output', '${p.outputSat} sats'),
-                const Divider(),
-                Text(
-                  'To: ${p.destination}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
+                InfoRow(label: 'Inputs', value: '${p.numInputs}'),
+                InfoRow(label: 'Total In', value: '${p.totalInputSat} sats'),
+                InfoRow(label: 'Fee', value: '${p.feeSat} sats'),
+                InfoRow(label: 'You Receive', value: '${p.outputSat} sats'),
+                const Divider(height: NoStringSpacing.xl),
+                InfoRow(label: 'Destination', value: p.destination, mono: true),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: NoStringSpacing.lg),
         const Text(
-          'Copy this PSBT and sign it with your wallet (Sparrow, hardware wallet, etc.)',
-          style: TextStyle(color: Colors.grey),
+          'Copy this PSBT and sign it with your wallet\n(Sparrow, hardware wallet, etc.)',
+          style: TextStyle(color: NoStringColors.textMuted, fontSize: 13),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 16),
+        const Spacer(),
         ElevatedButton.icon(
           onPressed: () {
             Clipboard.setData(ClipboardData(text: p.psbtBase64));
@@ -179,12 +194,9 @@ class _ClaimScreenState extends State<ClaimScreen> {
             );
           },
           icon: const Icon(Icons.copy),
-          label: const Text('Copy PSBT (Base64)'),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-          ),
+          label: const Text('Copy PSBT'),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: NoStringSpacing.sm),
         ElevatedButton.icon(
           onPressed: () {
             Navigator.push(
@@ -197,37 +209,21 @@ class _ClaimScreenState extends State<ClaimScreen> {
               ),
             );
           },
-          icon: const Icon(Icons.arrow_forward),
-          label: const Text("I've Signed It — Broadcast"),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            backgroundColor: NoStringColors.success,
           ),
+          icon: const Icon(Icons.arrow_forward),
+          label: const Text("I've Signed It"),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: NoStringSpacing.sm),
         OutlinedButton(
-          onPressed: () {
-            setState(() {
-              _psbt = null;
-              _error = null;
-            });
-          },
+          onPressed: () => setState(() {
+            _psbt = null;
+            _error = null;
+          }),
           child: const Text('Build Another'),
         ),
       ],
-    );
-  }
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
     );
   }
 }

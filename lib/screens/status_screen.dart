@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../src/rust/api.dart' as api;
+import '../theme/nostring_theme.dart';
+import '../widgets/gold_gradient_text.dart';
+import '../widgets/info_row.dart';
+import '../widgets/status_badge.dart';
 import 'claim_screen.dart';
 
 class StatusScreen extends StatefulWidget {
@@ -60,13 +64,16 @@ class _StatusScreenState extends State<StatusScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchStatus,
+            tooltip: 'Refresh',
           ),
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(NoStringSpacing.lg),
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: CircularProgressIndicator(color: NoStringColors.goldLight),
+              )
             : _error != null
                 ? _buildError()
                 : _buildStatus(),
@@ -79,17 +86,18 @@ class _StatusScreenState extends State<StatusScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 48, color: Colors.red),
-          const SizedBox(height: 16),
+          const Icon(Icons.cloud_off, size: 48, color: NoStringColors.error),
+          const SizedBox(height: NoStringSpacing.lg),
           Text(
             _error!,
-            style: const TextStyle(color: Colors.red),
+            style: const TextStyle(color: NoStringColors.error),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
-          ElevatedButton(
+          const SizedBox(height: NoStringSpacing.xl),
+          OutlinedButton.icon(
             onPressed: _fetchStatus,
-            child: const Text('Retry'),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
           ),
         ],
       ),
@@ -101,68 +109,95 @@ class _StatusScreenState extends State<StatusScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Balance card
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(NoStringSpacing.xl),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Balance',
-                    style: TextStyle(fontSize: 14, color: Colors.grey)),
-                const SizedBox(height: 4),
-                Text(
-                  '${s.balanceSat} sats',
-                  style: const TextStyle(
-                      fontSize: 28, fontWeight: FontWeight.bold),
+                const Text(
+                  'Balance',
+                  style: TextStyle(fontSize: 13, color: NoStringColors.textMuted),
                 ),
-                const SizedBox(height: 8),
-                Text('${s.utxoCount} UTXO(s)',
-                    style: const TextStyle(color: Colors.grey)),
+                const SizedBox(height: NoStringSpacing.xs),
+                GoldGradientText(
+                  '${s.balanceSat} sats',
+                  fontSize: 32,
+                ),
+                const SizedBox(height: NoStringSpacing.sm),
+                Text(
+                  '${s.utxoCount} UTXO(s)',
+                  style: const TextStyle(
+                    color: NoStringColors.textMuted,
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: NoStringSpacing.md),
+
+        // Timelock card
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(NoStringSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Timelock Status',
-                    style: TextStyle(fontSize: 14, color: Colors.grey)),
-                const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(
-                      s.eligible ? Icons.check_circle : Icons.hourglass_bottom,
-                      color: s.eligible ? Colors.green : Colors.orange,
-                      size: 32,
+                    const Text(
+                      'Timelock',
+                      style: TextStyle(fontSize: 13, color: NoStringColors.textMuted),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        s.eligible
-                            ? 'Timelock expired — eligible to claim'
-                            : '~${s.daysRemaining.toStringAsFixed(1)} days remaining (${s.blocksRemaining} blocks)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: s.eligible ? Colors.green : Colors.orange,
-                        ),
-                      ),
+                    const Spacer(),
+                    StatusBadge(
+                      label: s.eligible ? 'ELIGIBLE' : 'LOCKED',
+                      type: s.eligible ? BadgeType.success : BadgeType.warning,
+                      icon: s.eligible
+                          ? Icons.lock_open
+                          : Icons.hourglass_bottom,
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Current height: ${s.currentHeight}  |  Confirmed at: ${s.confirmationHeight}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                const SizedBox(height: NoStringSpacing.md),
+                if (s.eligible)
+                  const Text(
+                    'Timelock has expired. You can claim your funds.',
+                    style: TextStyle(
+                      color: NoStringColors.success,
+                      fontSize: 15,
+                    ),
+                  )
+                else
+                  Text(
+                    '~${s.daysRemaining.toStringAsFixed(1)} days remaining (${s.blocksRemaining} blocks)',
+                    style: const TextStyle(
+                      color: NoStringColors.warning,
+                      fontSize: 15,
+                    ),
+                  ),
+                const SizedBox(height: NoStringSpacing.md),
+                InfoRow(
+                  label: 'Current Height',
+                  value: '${s.currentHeight}',
+                  mono: true,
+                ),
+                InfoRow(
+                  label: 'Confirmed At',
+                  value: '${s.confirmationHeight}',
+                  mono: true,
                 ),
               ],
             ),
           ),
         ),
+
         const Spacer(),
+
+        // Claim button
         ElevatedButton.icon(
           onPressed: s.eligible && s.balanceSat > BigInt.zero
               ? () {
@@ -180,12 +215,8 @@ class _StatusScreenState extends State<StatusScreen> {
               : null,
           icon: const Icon(Icons.send),
           label: const Text('Claim Funds'),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-          ),
         ),
       ],
     );
   }
 }
-
